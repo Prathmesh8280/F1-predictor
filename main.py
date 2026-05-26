@@ -3,10 +3,9 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-import fastf1
 import plotly.graph_objects as go
 from src.predictor import run
-from src.data_loader import _ensure_cache_dir
+from src.data_loader import load_actual_results
 
 # F1 team colours
 TEAM_COLORS = {
@@ -46,35 +45,6 @@ def _bezier_curve(y0: float, y1: float, x0: float, x1: float, n: int = 80):
     return bx.tolist(), by.tolist()
 
 
-def load_actual_results(year: int, race: str) -> pd.DataFrame | None:
-    """Try to load actual race results from FastF1.
-
-    Returns a DataFrame with columns (driver, actual_position) if the race
-    has finished, or None if it hasn't happened yet.
-    """
-    _ensure_cache_dir()
-    try:
-        session = fastf1.get_session(year, race, "R")
-        session.load(laps=False, telemetry=False, weather=False, messages=False)
-        res = session.results
-        if res is None or res.empty:
-            return None
-        rows = []
-        for _, driver in res.iterrows():
-            pos = driver.get("Position")
-            if pd.isna(pos):
-                pos = 20
-            rows.append({
-                "driver": driver.get("Abbreviation", ""),
-                "actual_position": int(pos),
-            })
-        df = pd.DataFrame(rows)
-        print(f"  Actual results loaded for {year} {race}.")
-        return df
-    except Exception:
-        return None
-
-
 def plot_results(results, race: str, year: int, mae: float, actual_df=None):
     """Interactive slope chart: GRID → PREDICTED (→ ACTUAL if race is done).
 
@@ -94,16 +64,15 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
 
     # Column x-positions depend on whether we have 2 or 3 columns
     if has_actual:
-        X_GRID, X_PRED, X_ACTUAL = 0.12, 0.5, 0.88
+        x_grid, x_pred, x_actual = 0.12, 0.5, 0.88
     else:
-        X_GRID, X_PRED = 0.25, 0.75
-        X_ACTUAL = None
+        x_grid, x_pred, x_actual = 0.25, 0.75, None
 
     fig = go.Figure()
 
     # ── Row banding across the full channel ──────────────────────────────────
-    x_left  = X_GRID
-    x_right = X_ACTUAL if has_actual else X_PRED
+    x_left  = x_grid
+    x_right = x_actual if has_actual else x_pred
     for pos in range(1, n + 1):
         fig.add_shape(
             type="rect", xref="x", yref="y",
@@ -120,7 +89,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
     ]:
         fig.add_shape(
             type="rect", xref="x", yref="y",
-            x0=X_GRID, x1=X_PRED, y0=pos - 0.48, y1=pos + 0.48,
+            x0=x_grid, x1=x_pred, y0=pos - 0.48, y1=pos + 0.48,
             fillcolor=fill,
             line=dict(color=border, width=1),
             layer="below",
@@ -146,7 +115,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
 
         first_for_team = team not in seen_teams
         seen_teams[team] = color
-        bx, by = _bezier_curve(grid, pred, X_GRID, X_PRED)
+        bx, by = _bezier_curve(grid, pred, x_grid, x_pred)
 
         if is_podium:
             fig.add_trace(go.Scatter(
@@ -165,7 +134,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
         ))
 
         fig.add_trace(go.Scatter(
-            x=[X_GRID, X_PRED], y=[grid, pred], mode="markers",
+            x=[x_grid, x_pred], y=[grid, pred], mode="markers",
             marker=dict(
                 color=color, size=11 if is_podium else 7, symbol="circle",
                 line=dict(color="white", width=1.5 if is_podium else 0.8),
@@ -173,9 +142,11 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
             hoverinfo="skip", showlegend=False, legendgroup=team,
         ))
 
+    # Build once — used by both the bezier lines and the right-side labels
+    actual_lookup = dict(zip(actual_df["driver"], actual_df["actual_position"])) if has_actual else {}
+
     # ── PREDICTED → ACTUAL bezier lines (if race finished) ───────────────────
     if has_actual:
-        actual_lookup = dict(zip(actual_df["driver"], actual_df["actual_position"]))
         for _, row in results.iterrows():
             pred   = int(row["predicted_rank"])
             actual = actual_lookup.get(row["driver"])
@@ -195,7 +166,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
                 f"<b>Error: {error} position{'s' if error != 1 else ''}</b>"
             )
 
-            bx, by = _bezier_curve(pred, actual, X_PRED, X_ACTUAL)
+            bx, by = _bezier_curve(pred, actual, x_pred, x_actual)
             fig.add_trace(go.Scatter(
                 x=bx, y=by, mode="lines",
                 line=dict(color=acc_color, width=1.8, dash="dot"),
@@ -205,7 +176,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
             ))
 
             fig.add_trace(go.Scatter(
-                x=[X_ACTUAL], y=[actual], mode="markers",
+                x=[x_actual], y=[actual], mode="markers",
                 marker=dict(
                     color=acc_color, size=9 if actual <= 3 else 6,
                     symbol="circle",
@@ -219,7 +190,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
         grid  = int(row["grid_position"])
         color = _team_color(row["team"])
         fig.add_annotation(
-            x=X_GRID, y=grid,
+            x=x_grid, y=grid,
             text=f"<span style='color:#888888'>P{grid:>2}</span>  <b><span style='color:{color}'>{row['driver']}</span></b>",
             xanchor="right", yanchor="middle", showarrow=False,
             font=dict(size=12, family="'Courier New', monospace"), xshift=-16,
@@ -239,7 +210,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
         if has_actual:
             # When there's an actual column, predicted labels sit above/below the dot
             fig.add_annotation(
-                x=X_PRED, y=pred,
+                x=x_pred, y=pred,
                 text=(
                     f"<b><span style='color:{pos_col}'>P{pred}</span></b>"
                     f" <b><span style='color:{color}'>{row['driver']}</span></b>"
@@ -250,7 +221,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
             )
         else:
             fig.add_annotation(
-                x=X_PRED, y=pred,
+                x=x_pred, y=pred,
                 text=(
                     f"<b><span style='color:{pos_col}'>P{pred}</span></b>"
                     f"  <b><span style='color:{color}'>{row['driver']}</span></b>"
@@ -262,8 +233,6 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
 
     # ── Right labels: actual order ────────────────────────────────────────────
     if has_actual:
-        actual_lookup = dict(zip(actual_df["driver"], actual_df["actual_position"]))
-        # Build a lookup from driver → row for team color
         driver_to_team = dict(zip(results["driver"], results["team"]))
         by_actual = actual_df.sort_values("actual_position").reset_index(drop=True)
 
@@ -282,7 +251,7 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
             e_sym = f"▲{abs(error)}" if error > 0 else (f"▼{abs(error)}" if error < 0 else "—")
 
             fig.add_annotation(
-                x=X_ACTUAL, y=actual,
+                x=x_actual, y=actual,
                 text=(
                     f"<b><span style='color:{pos_col}'>P{actual}</span></b>"
                     f"  <b><span style='color:{color}'>{driver}</span></b>"
@@ -293,9 +262,9 @@ def plot_results(results, race: str, year: int, mae: float, actual_df=None):
             )
 
     # ── Column headers ────────────────────────────────────────────────────────
-    headers = [(X_GRID, "GRID"), (X_PRED, "PREDICTED")]
+    headers = [(x_grid, "GRID"), (x_pred, "PREDICTED")]
     if has_actual:
-        headers.append((X_ACTUAL, "ACTUAL"))
+        headers.append((x_actual, "ACTUAL"))
     for x, label in headers:
         fig.add_annotation(
             x=x, y=0.1, text=f"<b>{label}</b>",

@@ -54,8 +54,6 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
             for _, driver in results.iterrows():
                 position = driver.get("Position")
                 grid = driver.get("GridPosition")
-                status = str(driver.get("Status", "")).strip()
-                dnf = status not in ("Finished", "") and not status.startswith("+")
 
                 if pd.isna(position):
                     position = len(results) + 1
@@ -70,7 +68,6 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
                     "team": driver.get("TeamName", ""),
                     "grid_position": int(grid) if not pd.isna(grid) else 20,
                     "finish_position": position,
-                    "dnf": dnf,
                 })
             print(f"  Loaded {year} R{round_num}: {event_name}")
 
@@ -145,14 +142,14 @@ def load_practice_pace(year: int, race) -> pd.DataFrame:
             session = fastf1.get_session(year, race, "S")
             session.load(laps=True, telemetry=False, weather=False, messages=False)
             laps = session.laps.copy()
-            laps = laps[(laps["IsAccurate"] == True) & (laps["LapNumber"] > 1)]
+            laps = laps[laps["IsAccurate"] & (laps["LapNumber"] > 1)]
         else:
             print(f"  Loading FP2 long runs for {year} {race}...")
             session = fastf1.get_session(year, race, "FP2")
             session.load(laps=True, telemetry=False, weather=False, messages=False)
             laps = session.laps.copy()
             laps = laps[
-                (laps["IsAccurate"] == True)
+                laps["IsAccurate"]
                 & (laps["TyreLife"] > 3)
                 & (laps["Compound"].isin(["SOFT", "MEDIUM", "HARD"]))
             ]
@@ -176,3 +173,31 @@ def load_practice_pace(year: int, race) -> pd.DataFrame:
 
     print(f"  Practice pace loaded for {len(pace)} drivers.")
     return pace
+
+
+def load_actual_results(year: int, race: str) -> pd.DataFrame | None:
+    """Try to load actual race finish positions from FastF1.
+
+    Returns a DataFrame with columns (driver, actual_position) if the race
+    has finished, or None if it hasn't happened yet or data is unavailable.
+    """
+    _ensure_cache_dir()
+    try:
+        session = fastf1.get_session(year, race, "R")
+        session.load(laps=False, telemetry=False, weather=False, messages=False)
+        res = session.results
+        if res is None or res.empty:
+            return None
+        rows = []
+        for _, driver in res.iterrows():
+            pos = driver.get("Position")
+            if pd.isna(pos):
+                pos = 20
+            rows.append({
+                "driver": driver.get("Abbreviation", ""),
+                "actual_position": int(pos),
+            })
+        print(f"  Actual results loaded for {year} {race}.")
+        return pd.DataFrame(rows)
+    except Exception:
+        return None

@@ -67,14 +67,14 @@ def train_stage2(X: pd.DataFrame, y: np.ndarray):
 def predict_blended(
     stage1_model,
     stage2_model,
-    X_circuit: pd.DataFrame,
-    X_pace: pd.DataFrame,
+    x_circuit: pd.DataFrame,
+    x_pace: pd.DataFrame,
     alpha: float = BLEND_ALPHA,
 ) -> np.ndarray:
     """Blend Stage 1 (circuit baseline) and Stage 2 (current pace) predictions.
 
     alpha=0.35 means 35% circuit baseline, 65% current pace.
     """
-    pred1 = stage1_model.predict(X_circuit[STAGE1_FEATURES])
-    pred2 = stage2_model.predict(X_pace[STAGE2_FEATURES])
+    pred1 = stage1_model.predict(x_circuit[STAGE1_FEATURES])
+    pred2 = stage2_model.predict(x_pace[STAGE2_FEATURES])
     return alpha * pred1 + (1 - alpha) * pred2

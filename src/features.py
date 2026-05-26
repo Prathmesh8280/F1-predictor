@@ -74,11 +74,11 @@ def build_stage2_training_data(
             driver = result["driver"]
             team = result["team"]
 
-            dq = quali[quali["driver"] == driver]
-            if dq.empty:
+            driver_quali = quali[quali["driver"] == driver]
+            if driver_quali.empty:
                 continue
 
-            q_time = dq["qualifying_time_s"].iloc[0]
+            q_time = driver_quali["qualifying_time_s"].iloc[0]
             quali_gap = (
                 float(q_time - pole_time)
                 if q_time is not None and not pd.isna(q_time) and pole_time is not None
@@ -87,9 +87,9 @@ def build_stage2_training_data(
 
             practice_gap = np.nan
             if practice is not None and not practice.empty and fastest_practice is not None:
-                dp = practice[practice["driver"] == driver]
-                if not dp.empty:
-                    practice_gap = float(dp["practice_pace_s"].iloc[0] - fastest_practice)
+                driver_practice = practice[practice["driver"] == driver]
+                if not driver_practice.empty:
+                    practice_gap = float(driver_practice["practice_pace_s"].iloc[0] - fastest_practice)
 
             driver_prev = prev_races[prev_races["driver"] == driver]
             driver_avg = driver_prev["finish_position"].mean() if not driver_prev.empty else np.nan
@@ -131,10 +131,10 @@ def build_prediction_features(
 
     circuit_rows, pace_rows = [], []
 
-    for _, dr in quali_df.iterrows():
-        driver = dr["driver"]
-        team = dr["team"]
-        grid = float(dr["grid_position"])
+    for _, driver_row in quali_df.iterrows():
+        driver = driver_row["driver"]
+        team = driver_row["team"]
+        grid = float(driver_row["grid_position"])
 
         circuit_rows.append({
             "driver": driver,
@@ -143,7 +143,7 @@ def build_prediction_features(
             "circuit_encoded": circuit_id,
         })
 
-        q_time = dr.get("qualifying_time_s")
+        q_time = driver_row.get("qualifying_time_s")
         quali_gap = (
             float(q_time - pole_time)
             if q_time is not None and not pd.isna(q_time) and pole_time is not None
@@ -152,9 +152,9 @@ def build_prediction_features(
 
         practice_gap = np.nan
         if practice_pace is not None and not practice_pace.empty and fastest_practice is not None:
-            dp = practice_pace[practice_pace["driver"] == driver]
-            if not dp.empty:
-                practice_gap = float(dp["practice_pace_s"].iloc[0] - fastest_practice)
+            driver_practice = practice_pace[practice_pace["driver"] == driver]
+            if not driver_practice.empty:
+                practice_gap = float(driver_practice["practice_pace_s"].iloc[0] - fastest_practice)
 
         driver_hist = history_2026[history_2026["driver"] == driver]
         driver_avg = driver_hist["finish_position"].mean() if not driver_hist.empty else np.nan

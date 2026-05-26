@@ -40,10 +40,10 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
     history_circuit = load_history(train_years=circuit_years, force_refresh=force_refresh)
 
     circuit_map = build_circuit_map(history_circuit)
-    X1_train, y1_train, circuit_map = build_circuit_features(history_circuit, circuit_map)
+    x1_train, y1_train, circuit_map = build_circuit_features(history_circuit, circuit_map)
 
     print("[Stage 1] Training circuit baseline model...")
-    stage1_model = mdl.train_stage1(X1_train, y1_train)
+    stage1_model = mdl.train_stage1(x1_train, y1_train)
 
     # ── Stage 2: current-season pace ─────────────────────────────────────────
     print(f"\n[Stage 2] Loading {year} race data...")
@@ -97,7 +97,7 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
     # Form features must not include the race being predicted
     history_for_form = history_2026[history_2026["round"] != target_round]
 
-    X_circuit, X_pace = build_prediction_features(
+    x_circuit, x_pace = build_prediction_features(
         quali_df=quali_df,
         practice_pace=practice_pace,
         history_2026=history_for_form,
@@ -106,19 +106,18 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
     )
 
     if use_stage2:
-        predicted_positions = mdl.predict_blended(stage1_model, stage2_model, X_circuit, X_pace)
-        # Blended MAE: weighted combination of each stage's training error
-        mae1 = mean_absolute_error(y1_train, stage1_model.predict(X1_train[STAGE1_FEATURES]))
+        predicted_positions = mdl.predict_blended(stage1_model, stage2_model, x_circuit, x_pace)
+        mae1 = mean_absolute_error(y1_train, stage1_model.predict(x1_train[STAGE1_FEATURES]))
         mae2 = mean_absolute_error(
             stage2_df["finish_position"].values,
             stage2_model.predict(stage2_df[STAGE2_FEATURES]),
         )
         mae = mdl.BLEND_ALPHA * mae1 + (1 - mdl.BLEND_ALPHA) * mae2
     else:
-        predicted_positions = stage1_model.predict(X_circuit[STAGE1_FEATURES])
-        mae = mean_absolute_error(y1_train, stage1_model.predict(X1_train[STAGE1_FEATURES]))
+        predicted_positions = stage1_model.predict(x_circuit[STAGE1_FEATURES])
+        mae = mean_absolute_error(y1_train, stage1_model.predict(x1_train[STAGE1_FEATURES]))
 
-    results = X_circuit[["driver", "team", "grid_position"]].copy()
+    results = x_circuit[["driver", "team", "grid_position"]].copy()
     results = results.iloc[np.argsort(predicted_positions)].reset_index(drop=True)
     results["predicted_rank"] = results.index + 1
 
