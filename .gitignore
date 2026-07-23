@@ -1,5 +1,17 @@
-# FastF1 cache, prediction outputs, and history cache
-data/
+# Ignore everything inside data/ except our pre-built pickle caches.
+# The pickle files are committed so deployed servers don't need to
+# re-download from FastF1 on cold start.
+# Post-race update: python warm_cache.py --stage2 → git add data/*.pkl → push
+data/*
+!data/history_*.pkl
+!data/quali_*.pkl
+!data/practice_*.pkl
+
+# Output artifacts — never commit these
+data/*.csv
+data/*.json
+data/*.png
+data/*.html
 
 # Python
 __pycache__/
