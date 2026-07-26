@@ -130,6 +130,29 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
     return df
 
 
+def _fetch_race_grid(year: int, race) -> dict:
+    """Return {driver_abbr: grid_position} from the race session, or {} if unavailable.
+
+    Grid positions from the race session reflect penalties applied after qualifying
+    (gearbox, engine, pit-lane starts). Returns empty dict when the race hasn't
+    happened yet — callers fall back to qualifying order in that case.
+    FastF1 caches sessions locally, so this is fast after the first load.
+    """
+    try:
+        race_session = fastf1.get_session(year, race, "R")
+        race_session.load(laps=False, telemetry=False, weather=False, messages=False)
+        res = race_session.results
+        if res is None or res.empty:
+            return {}
+        return {
+            r.get("Abbreviation", ""): int(r.get("GridPosition"))
+            for _, r in res.iterrows()
+            if r.get("Abbreviation", "") and not pd.isna(r.get("GridPosition"))
+        }
+    except Exception:
+        return {}
+
+
 def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFrame:
     """Load qualifying session — best of Q3/Q2/Q1 per driver.
 
@@ -137,11 +160,25 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
     grid penalties (e.g. gearbox, engine penalties) are applied after qualifying
     and are only reflected in the race session's GridPosition. For races that
     haven't happened yet the race session falls back gracefully to qualifying order.
+
+    The race-grid overlay runs on every call (cache hit or miss). It is a no-op
+    before the race; after the race it silently corrects any cached qualifying
+    order and re-saves the pickle so subsequent calls are instant.
     """
     _ensure_cache_dir()
     cache_path = _session_cache_path("quali", year, race)
+
     if not force_refresh and os.path.exists(cache_path):
-        return pd.read_pickle(cache_path)
+        df = pd.read_pickle(cache_path)
+        # Overlay race grid positions in case penalties were applied after qualifying
+        # or the cache was created before the race session was available.
+        actual_grid = _fetch_race_grid(year, race)
+        if actual_grid:
+            new_grid = df["driver"].map(actual_grid).fillna(df["grid_position"]).astype(int)
+            if not new_grid.equals(df["grid_position"]):
+                df["grid_position"] = new_grid
+                df.to_pickle(cache_path)
+        return df
 
     print(f"Fetching qualifying data: {year} {race}...")
 
@@ -155,21 +192,7 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
     if results is None or results.empty:
         raise RuntimeError(f"No qualifying results found for {year} {race}")
 
-    # Try to get actual race grid positions (includes grid penalties applied post-qualifying).
-    # Falls back gracefully when race hasn't happened yet.
-    actual_grid: dict = {}
-    try:
-        race_session = fastf1.get_session(year, race, "R")
-        race_session.load(laps=False, telemetry=False, weather=False, messages=False)
-        race_results = race_session.results
-        if race_results is not None and not race_results.empty:
-            for _, r in race_results.iterrows():
-                drv = r.get("Abbreviation", "")
-                gp = r.get("GridPosition")
-                if drv and not pd.isna(gp):
-                    actual_grid[drv] = int(gp)
-    except Exception:
-        pass  # Race not yet run — use qualifying GridPosition as best estimate
+    actual_grid = _fetch_race_grid(year, race)
 
     rows = []
     for _, driver in results.iterrows():
