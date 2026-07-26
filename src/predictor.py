@@ -5,7 +5,7 @@ import fastf1
 import numpy as np
 import pandas as pd
 
-from src.data_loader import load_history, load_qualifying, load_practice_pace, normalise_location
+from src.data_loader import load_history, load_qualifying, load_practice_pace, normalise_location, fetch_race_grid
 from src.features import (
     build_circuit_map,
     build_circuit_features,
@@ -346,13 +346,20 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
     if quali_df.empty:
         raise RuntimeError(f"No qualifying data found for {year} {race}")
 
-    # load_history fetches grid_position from the race session, which reflects
-    # penalties applied after qualifying (gearbox, engine, pit-lane starts).
-    # The quali cache may predate the race and carry only qualifying order — overlay
-    # the correct grid here. No-op for future races (no matching round in history).
+    # Overlay the actual starting grid (includes post-qualifying penalties).
+    # Two sources, in priority order:
+    #   1. history_season — available once the race has finished; grid_position
+    #      there comes from the race session so penalties are already applied.
+    #   2. fetch_race_grid — live FastF1 call used when the race is in progress
+    #      or qualifying penalties have been published but the race hasn't started.
+    #      Falls back silently to qualifying order if the session isn't up yet.
     race_rows = history_season[history_season["round"] == target_round]
     if not race_rows.empty:
         grid_map = race_rows.set_index("driver")["grid_position"].to_dict()
+    else:
+        grid_map = fetch_race_grid(year, race)
+
+    if grid_map:
         quali_df = quali_df.copy()
         quali_df["grid_position"] = (
             quali_df["driver"].map(grid_map).fillna(quali_df["grid_position"]).astype(int)

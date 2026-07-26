@@ -130,7 +130,7 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
     return df
 
 
-def _fetch_race_grid(year: int, race) -> dict:
+def fetch_race_grid(year: int, race) -> dict:
     """Return {driver_abbr: grid_position} from the race session, or {} if unavailable.
 
     Grid positions from the race session reflect penalties applied after qualifying
@@ -183,7 +183,7 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
     if results is None or results.empty:
         raise RuntimeError(f"No qualifying results found for {year} {race}")
 
-    actual_grid = _fetch_race_grid(year, race)
+    actual_grid = fetch_race_grid(year, race)
 
     rows = []
     for _, driver in results.iterrows():
