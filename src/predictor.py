@@ -346,6 +346,18 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
     if quali_df.empty:
         raise RuntimeError(f"No qualifying data found for {year} {race}")
 
+    # load_history fetches grid_position from the race session, which reflects
+    # penalties applied after qualifying (gearbox, engine, pit-lane starts).
+    # The quali cache may predate the race and carry only qualifying order — overlay
+    # the correct grid here. No-op for future races (no matching round in history).
+    race_rows = history_season[history_season["round"] == target_round]
+    if not race_rows.empty:
+        grid_map = race_rows.set_index("driver")["grid_position"].to_dict()
+        quali_df = quali_df.copy()
+        quali_df["grid_position"] = (
+            quali_df["driver"].map(grid_map).fillna(quali_df["grid_position"]).astype(int)
+        )
+
     practice_pace    = load_practice_pace(year, race, force_refresh=force_refresh)
     history_for_form = history_season[history_season["round"] < target_round]
 

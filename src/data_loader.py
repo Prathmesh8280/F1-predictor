@@ -161,24 +161,15 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
     and are only reflected in the race session's GridPosition. For races that
     haven't happened yet the race session falls back gracefully to qualifying order.
 
-    The race-grid overlay runs on every call (cache hit or miss). It is a no-op
-    before the race; after the race it silently corrects any cached qualifying
-    order and re-saves the pickle so subsequent calls are instant.
+    Grid positions in the returned DataFrame reflect qualifying order. Callers
+    that have the race history available (predictor.run, backtest._collect_components)
+    overlay the penalty-corrected grid from load_history before using it.
     """
     _ensure_cache_dir()
     cache_path = _session_cache_path("quali", year, race)
 
     if not force_refresh and os.path.exists(cache_path):
-        df = pd.read_pickle(cache_path)
-        # Overlay race grid positions in case penalties were applied after qualifying
-        # or the cache was created before the race session was available.
-        actual_grid = _fetch_race_grid(year, race)
-        if actual_grid:
-            new_grid = df["driver"].map(actual_grid).fillna(df["grid_position"]).astype(int)
-            if not new_grid.equals(df["grid_position"]):
-                df["grid_position"] = new_grid
-                df.to_pickle(cache_path)
-        return df
+        return pd.read_pickle(cache_path)
 
     print(f"Fetching qualifying data: {year} {race}...")
 

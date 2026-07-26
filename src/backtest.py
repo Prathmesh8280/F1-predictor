@@ -100,6 +100,17 @@ def _collect_components(history: pd.DataFrame, quali_cache: dict, practice_cache
             skipped.append((label, "no qualifying data"))
             continue
 
+        # Overlay penalty-corrected grid from race history. load_history reads
+        # grid_position from the race session (includes all post-qualifying
+        # penalties); the quali cache may only have qualifying order.
+        race_rows = history[(history["year"] == year) & (history["round"] == rnd)]
+        if not race_rows.empty:
+            grid_map = race_rows.set_index("driver")["grid_position"].to_dict()
+            quali_df = quali_df.copy()
+            quali_df["grid_position"] = (
+                quali_df["driver"].map(grid_map).fillna(quali_df["grid_position"]).astype(int)
+            )
+
         circuit_history = history[history["year"] < year]
         season_train    = history[(history["year"] == year) & (history["round"] < rnd)]
 
