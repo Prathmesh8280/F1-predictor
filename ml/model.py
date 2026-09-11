@@ -8,7 +8,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error
 
-from src.features import STAGE1_FEATURES, STAGE2_FEATURES
+from ml.features import STAGE1_FEATURES, STAGE2_FEATURES
 
 
 class GridCircuitInteraction(BaseEstimator, TransformerMixin):

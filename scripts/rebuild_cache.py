@@ -12,13 +12,17 @@ Usage:
 """
 import argparse
 import os
+import sys
 import time
+
+# Ensure the repo root is importable when run as `python scripts/rebuild_cache.py`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import fastf1
 import pandas as pd
 from datetime import datetime, timezone
 
-from src.data_loader import load_history, load_qualifying, load_practice_pace, CACHE_DIR
+from ml.data_loader import load_history, load_qualifying, load_practice_pace, CACHE_DIR
 
 
 def _completed_rounds(year: int) -> list[int]:

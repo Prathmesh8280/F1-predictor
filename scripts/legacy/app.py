@@ -1,13 +1,20 @@
 import os
+import sys
 import logging
 import base64
 import urllib.request
+
+# Legacy Streamlit UI kept for local use; ensure the repo root is importable so
+# `ml` resolves, and this directory so the local `visualize` module resolves.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import fastf1
 from datetime import date, timedelta
-from src.predictor import run
-from src.data_loader import load_actual_results, CACHE_DIR
-from src.visualize import team_color
+from ml.predictor import run
+from ml.data_loader import load_actual_results, CACHE_DIR
+from visualize import team_color
 
 fastf1.Cache.enable_cache(str(CACHE_DIR))
 logging.getLogger("fastf1._api").setLevel(logging.ERROR)

@@ -5,19 +5,19 @@ import fastf1
 import numpy as np
 import pandas as pd
 
-from src.data_loader import load_history, load_qualifying, load_practice_pace, normalise_location, fetch_race_grid
-from src.features import (
+from ml.data_loader import load_history, load_qualifying, load_practice_pace, normalise_location, fetch_race_grid
+from ml.features import (
     build_circuit_map,
     build_circuit_features,
     build_stage2_training_data,
     build_prediction_features,
     STAGE1_FEATURES,
 )
-from src import model as mdl
+from ml import model as mdl
+
+from ml.config import BACKTEST_SUMMARY as _BACKTEST_SUMMARY
 
 MIN_STAGE2_ROWS = 15
-
-_BACKTEST_SUMMARY = os.path.join(os.path.dirname(__file__), "..", "data", "backtest_summary.json")
 
 _RACE_ALIASES = {
     "cota": "Austin",

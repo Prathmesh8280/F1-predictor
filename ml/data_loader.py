@@ -5,11 +5,11 @@ import fastf1
 import numpy as np
 import pandas as pd
 
+from ml.config import CACHE_DIR
+
 # Suppress FastF1's verbose INFO chatter — we print our own progress messages.
 # WARNING and above (accuracy checks, tyre corrections, etc.) stay visible.
 logging.getLogger("fastf1").setLevel(logging.WARNING)
-
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 
 # FastF1 returns different Location strings for the same circuit across API
 # versions / seasons. Normalise to a single canonical name so circuit-map

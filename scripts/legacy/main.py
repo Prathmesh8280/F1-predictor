@@ -1,10 +1,16 @@
 import argparse
 import os
 import sys
+
+# Legacy CLI kept for local use; ensure the repo root is importable so `ml`
+# resolves, and this directory so the local `visualize` module resolves.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import pandas as pd
-from src.predictor import run
-from src.data_loader import load_actual_results
-from src.visualize import build_chart
+from ml.predictor import run
+from ml.data_loader import load_actual_results
+from visualize import build_chart
 
 
 def main():

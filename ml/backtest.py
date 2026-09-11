@@ -30,11 +30,11 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from src import model as mdl
-from src.data_loader import load_history, load_qualifying, load_practice_pace, normalise_location
-from src.predictor import build_circuit_model, predict_components
+from ml import model as mdl
+from ml.config import DATA_DIR
+from ml.data_loader import load_history, load_qualifying, load_practice_pace, normalise_location
+from ml.predictor import build_circuit_model, predict_components
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 RESULTS_CSV = os.path.join(DATA_DIR, "backtest_results.csv")
 SUMMARY_JSON = os.path.join(DATA_DIR, "backtest_summary.json")
 TUNING_CSV = os.path.join(DATA_DIR, "alpha_tuning.csv")
