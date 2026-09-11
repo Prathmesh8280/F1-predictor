@@ -6,9 +6,9 @@ Stage 2 cache  (2026 per-round)     — run again after each race weekend to pic
                                        the new race result, qualifying, and FP2 data.
 
 Usage:
-  python warm_cache.py              # warm everything not yet cached
-  python warm_cache.py --refresh    # force re-download from FastF1 (full refresh)
-  python warm_cache.py --stage2     # refresh 2026 data only (post-race update)
+  python scripts/rebuild_cache.py            # warm everything not yet cached
+  python scripts/rebuild_cache.py --refresh  # force re-download from FastF1 (full refresh)
+  python scripts/rebuild_cache.py --stage2   # refresh current-season data (post-race update)
 """
 import argparse
 import os

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "f1-predictor"
+version = "0.1.0"
+description = "F1 race result predictor — two-stage ML pipeline with a FastAPI backend and React frontend."
+requires-python = ">=3.10"
+readme = "README.md"
+
+# Runtime dependencies are pinned in the requirements files so the Render Docker
+# build stays simple and unchanged:
+#   backend/requirements.txt  — API server (deployed)
+#   requirements.txt          — full ML + legacy local dev set
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[tool.setuptools]
+# Import packages in place; nothing is built/installed for deployment.
+packages = ["ml", "backend"]
+
+[tool.pytest.ini_options]
+# Run from the repo root; make `ml` and `backend` importable.
+pythonpath = ["."]
+testpaths = ["ml/tests", "backend/tests"]
+addopts = "-q"

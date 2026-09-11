@@ -1,3 +1,5 @@
+# Deployed API dependency set (used by the Render Docker build).
+# For full local ML/legacy tooling see the root requirements.txt.
 fastapi
 uvicorn[standard]
 fastf1>=3.3

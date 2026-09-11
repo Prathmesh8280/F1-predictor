@@ -1,78 +1,71 @@
 # F1 Race Predictor
 
-A Formula 1 race prediction web app. Given qualifying results and practice session data, a two-stage machine learning pipeline predicts each driver's finishing position. Results are served via a FastAPI backend and displayed in a React frontend with animated visualisations.
+A Formula 1 race prediction web app. A two-stage machine learning pipeline
+predicts each driver's finishing position from qualifying, practice pace, and
+season form. Served by a FastAPI backend and a React + TypeScript frontend with
+animated visualisations.
 
 Live at: *(deploy URL here)*
 
 ---
 
-## How it works
-
-The model is split into two stages:
-
-**Stage 1 — Circuit baseline** (trained on 2024–2025 seasons)
-Learns how grid position translates to finish position at each specific circuit via a grid×circuit interaction. Each track gets its own grid slope, regularised toward a global slope. Circuit layout doesn't change with rule changes, so prior seasons are valid training data.
-
-**Stage 2 — Current pace & form** (trained on the current season only)
-Learns who is actually fast under 2026 regulations using:
-- Qualifying gap to pole (seconds behind the fastest qualifier)
-- FP2 long-run pace — gap to fastest and race-pace rank (median lap on race compounds, TyreLife > 3)
-- Sprint race lap times on sprint weekends (used instead of FP2)
-- Driver and team average finish position this season so far
-
-Stage 2 carries **no direct grid anchor** — backtest showed that anchoring to grid made it echo the qualifying order. Keeping it to pace + form lets it predict genuine position changes.
-
-**Final prediction = 60% Stage 1 + 40% Stage 2** (blend weight chosen by walk-forward backtest)
-
----
-
-## Evaluation
-
-Validated with a **walk-forward backtest** — for each race, the model is trained only on data available *before* that race, then scored against the actual result. All metrics are **out-of-sample** over 36 races (2024–2026).
-
-The headline metric is **finishers-only MAE**: error over drivers who completed the race, with DNFs excluded. DNFs are irreducible noise — no pre-race feature predicts an engine failure — and finishers-only MAE measures what is actually predictable.
-
-| Metric | Model | Grid-order baseline |
-|---|---|---|
-| **Finishers-only MAE (positions)** | **2.08** | 2.19 |
-| Finishers Spearman correlation | **0.81** | — |
-| All-drivers MAE (positions) | 3.40 | 3.39 |
-| Podium hit rate | 74% | — |
-
-On the predictable part of the race (classified finishers), the model **beats a "qualifying order holds" baseline by ~0.11 positions** — a small but robust margin, consistent across a broad range of blend weights.
-
----
-
-## Project structure
+## Repository structure
 
 ```
 F1-predictor/
-├── backend/
-│   ├── api.py               # FastAPI app — /races, /predict, /logo endpoints
-│   └── requirements.txt     # Backend Python dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── api/             # Fetch wrappers (client.ts)
-│   │   ├── components/race/ # All race UI components (PredictionTable, GridFlowViz, etc.)
-│   │   ├── constants/       # Circuit metadata, driver info, overtaking config
-│   │   ├── hooks/           # useInView hook
-│   │   ├── lib/             # Prediction signal helpers
-│   │   ├── pages/           # RacesPage (main), HowItWorksPage, AboutPage
-│   │   └── types/           # Shared TypeScript types
-│   ├── vercel.json          # Vercel SPA routing
-│   └── package.json
-├── src/
-│   ├── data_loader.py       # FastF1 fetching — results, qualifying, FP2/sprint pace
-│   ├── features.py          # Feature engineering for Stage 1 and Stage 2
-│   ├── model.py             # Two-stage Ridge regression and blended prediction
-│   ├── predictor.py         # Pipeline orchestration
+├── backend/                 # FastAPI application
+│   ├── app/
+│   │   ├── main.py          # App entrypoint (uvicorn backend.app.main:app)
+│   │   ├── config.py        # CORS, title, cache dir (env-driven)
+│   │   ├── constants.py     # Circuit metadata, round map, logo slugs
+│   │   ├── routes/          # HTTP layer: health, races, predictions, logos
+│   │   ├── services/        # App logic: race_service, prediction_service
+│   │   └── schemas/         # Pydantic request/response models
+│   ├── tests/               # pytest — routes + services (no network)
+│   └── requirements.txt     # Deployed API dependency set
+├── ml/                      # Prediction pipeline (imported by the backend)
+│   ├── config.py            # Central data/cache paths (F1_DATA_DIR overridable)
+│   ├── data_loader.py       # FastF1 + OpenF1 fetching, pkl caching
+│   ├── features.py          # Feature engineering (Stage 1 + Stage 2)
+│   ├── model.py             # Two-stage Ridge regression
+│   ├── predictor.py         # Pipeline orchestration (run())
 │   ├── backtest.py          # Walk-forward out-of-sample evaluation
-│   └── experiments.py       # Feature and model bake-off
-├── data/                    # Pre-baked pkl caches (committed — warm cold start)
-├── Dockerfile               # Backend image for Render
-├── render.yaml              # Render deployment config
-└── requirements.txt         # Root ML/data dependencies
+│   └── tests/               # pytest — features, model, predictor, backtest
+├── frontend/                # React + Vite + Tailwind
+│   ├── src/                 # api/ components/ constants/ hooks/ lib/ pages/ types/
+│   └── tests/               # vitest — signals, round map, API client
+├── scripts/
+│   ├── download_data.py     # Download raw season history
+│   ├── rebuild_cache.py     # Warm all caches (post-race update)
+│   ├── run_prediction.py    # Headless single-race prediction (CLI)
+│   └── legacy/              # Superseded Streamlit UI + Plotly CLI (kept for reference)
+├── data/                    # Committed pkl caches (warm cold-start) — see data/README.md
+├── docs/                    # architecture/ + model/
+├── Dockerfile, render.yaml  # Backend deploy (Render)
+├── frontend/vercel.json     # Frontend deploy (Vercel)
+├── pyproject.toml           # Metadata + pytest config
+└── .env.example             # Environment variable reference
 ```
+
+---
+
+## How it works
+
+**Stage 1 — circuit baseline** (2024–2025): learns how grid position maps to a
+finish-position delta at each circuit, with a per-circuit grid slope regularised
+toward a global slope.
+
+**Stage 2 — current pace & form** (current season): three rank features —
+qualifying/championship/constructor standing and FP2 long-run pace. No direct
+grid anchor.
+
+**Final = 60% Stage 1 + 40% Stage 2**, re-ranked to a finishing order. Blend
+weight tuned by a walk-forward backtest. Full detail in
+[docs/model/pipeline.md](docs/model/pipeline.md); system design in
+[docs/architecture/overview.md](docs/architecture/overview.md).
+
+Latest out-of-sample result: **2.08 finishers-only MAE** vs a 2.19 grid-order
+baseline over 36 races.
 
 ---
 
@@ -82,47 +75,68 @@ F1-predictor/
 
 ```bash
 pip install -r backend/requirements.txt
-uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The backend serves on `http://localhost:8000`. Qualifying data for the current race is fetched and cached on the first `/predict` call.
+Serves on `http://localhost:8000`. Endpoints: `/health`, `/races`, `/predict`,
+`/logo/{slug}`.
 
 ### Frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev          # http://localhost:5173, proxies API to :8000
 ```
 
-The frontend dev server runs on `http://localhost:5173` and proxies all API calls to `localhost:8000`.
+---
+
+## Tests
+
+```bash
+# Python (backend + ml) — deterministic, no network
+pip install -r backend/requirements.txt pytest httpx
+pytest
+
+# Frontend
+cd frontend
+npm run typecheck
+npm run test
+```
+
+CI runs all of the above on push/PR — see `.github/workflows/test.yml`.
+
+---
+
+## ML / data scripts
+
+```bash
+python scripts/run_prediction.py --race Italy --year 2026   # headless prediction
+python scripts/rebuild_cache.py --stage2                     # refresh current season
+python scripts/download_data.py --years 2024 2025            # download raw history
+python -m ml.backtest                                        # out-of-sample metrics
+python -m ml.backtest --tune                                 # sweep blend weight
+```
 
 ---
 
 ## Deployment
 
-- **Backend → Render** (Docker, `render.yaml` provided)
-- **Frontend → Vercel** (static build, `vercel.json` provided)
+- **Backend → Render** (Docker, `render.yaml`). Pre-baked `data/` pkl caches are
+  copied into the image so the server starts warm.
+- **Frontend → Vercel** (static build, `frontend/vercel.json`). Set
+  `VITE_API_URL` to the Render backend URL.
 
-Set `VITE_API_URL` in Vercel's environment variables to the Render backend URL before deploying the frontend.
-
-Pre-baked pkl caches in `data/` are committed and included in the Docker image so the server starts warm — no cold-download delay on first request.
+Configuration is environment-driven — see [.env.example](.env.example).
 
 ### Updating after each race weekend
 
-After a race completes, run the following to refresh the cache and push warm data:
-
 ```bash
-# Force-refresh the current season history and the completed race's data
-python -c "from src.data_loader import load_history; load_history((2026,), force_refresh=True)"
-
-# Then commit the updated pkls
+python scripts/rebuild_cache.py --stage2   # refresh current-season data
 git add data/*.pkl
 git commit -m "Update 2026 cache post-{Race} GP (R{N})"
-git push
+git push                                    # Render redeploys automatically
 ```
-
-Render will redeploy automatically on push.
 
 ---
 
@@ -131,21 +145,9 @@ Render will redeploy automatically on push.
 | Data | Source | Used for |
 |---|---|---|
 | Race results (2024–2025) | FastF1 | Stage 1 circuit pattern training |
-| Race results (2026) | FastF1 | Stage 2 driver/team form |
-| Starting grid (penalty-corrected) | OpenF1 `/v1/starting_grid` | Accurate pre-race grid positions |
+| Race results (current) | FastF1 | Stage 2 driver/team form |
+| Starting grid (penalty-corrected) | OpenF1 | Accurate pre-race grid positions |
 | Qualifying session | FastF1 | Gap-to-pole feature |
-| FP2 laps / Sprint laps | FastF1 | Race pace proxy |
+| FP2 / Sprint laps | FastF1 | Race pace proxy |
 | Actual results (post-race) | FastF1 | Post-race comparison view |
-| Team logos | Formula1.com CDN | Frontend team badges |
-| Circuit maps | Formula1.com CDN | Circuit context section |
-
----
-
-## Backtest commands
-
-```bash
-python -m src.backtest          # Out-of-sample metrics vs grid baseline
-python -m src.backtest --tune   # Sweep blend weight
-python -m src.experiments       # Stage 2 feature + model bake-off
-python -m src.experiments --stage1   # A/B Stage 1 training scope
-```
+| Team logos / circuit maps | Formula1.com CDN | Frontend assets |

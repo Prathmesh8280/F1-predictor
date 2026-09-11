@@ -1,8 +1,13 @@
+# Full local / ML development dependency set.
+# The deployed API uses the leaner backend/requirements.txt instead.
+#
+# ML + data pipeline
 fastf1>=3.3
 pandas>=2.0
 numpy>=1.26
 scikit-learn>=1.4
 scipy>=1.11
+# Legacy CLI / Streamlit tooling (scripts/legacy/)
 matplotlib>=3.8
 plotly>=5.0
 streamlit>=1.35
