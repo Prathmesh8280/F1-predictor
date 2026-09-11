@@ -181,9 +181,11 @@ def predict_components(
         return vals.fillna(fill_val).rank(ascending=ascending, method="min").values
 
     signals, weights = [], []
+    champ_rank_arr = const_rank_arr = fp2_rank_arr = None
 
     if not driver_standings.empty:
-        signals.append(_rank_col(driver_standings, "driver_points", ascending=False))
+        champ_rank_arr = _rank_col(driver_standings, "driver_points", ascending=False)
+        signals.append(champ_rank_arr)
         weights.append(mdl.DRIVER_CHAMP_WEIGHT)
 
     if not constructor_standings.empty and "team" in quali_df.columns:
@@ -192,7 +194,8 @@ def predict_components(
         driver_constructor["team"] = driver_constructor["driver"].map(team_map)
         driver_constructor = driver_constructor.merge(constructor_standings, on="team", how="left")
         driver_constructor["constructor_points"] = driver_constructor["constructor_points"].fillna(0)
-        signals.append(driver_constructor["constructor_points"].rank(ascending=False, method="min").values)
+        const_rank_arr = driver_constructor["constructor_points"].rank(ascending=False, method="min").values
+        signals.append(const_rank_arr)
         weights.append(mdl.CONSTRUCTOR_CHAMP_WEIGHT)
 
     has_fp2 = (
@@ -202,7 +205,8 @@ def predict_components(
         and practice_pace["practice_pace_s"].notna().any()
     )
     if has_fp2:
-        signals.append(_rank_col(practice_pace, "practice_pace_s", ascending=True))
+        fp2_rank_arr = _rank_col(practice_pace, "practice_pace_s", ascending=True)
+        signals.append(fp2_rank_arr)
         weights.append(mdl.FP2_WEIGHT)
 
     stage2_rank = None
@@ -210,7 +214,17 @@ def predict_components(
         total_w = sum(weights)
         stage2_rank = sum(s * w / total_w for s, w in zip(signals, weights))
 
-    return x_circuit, delta1, stage2_rank
+    _nan = np.full(len(drivers), np.nan)
+    signals_df = pd.DataFrame({
+        "driver":            drivers.values,
+        "delta1":            delta1,
+        "championship_rank": champ_rank_arr if champ_rank_arr is not None else _nan,
+        "constructor_rank":  const_rank_arr  if const_rank_arr  is not None else _nan,
+        "fp2_pace_rank":     fp2_rank_arr    if fp2_rank_arr    is not None else _nan,
+        "stage2_used":       stage2_rank is not None,
+    })
+
+    return x_circuit, delta1, stage2_rank, signals_df
 
 
 def predict_one(
@@ -229,7 +243,7 @@ def predict_one(
     Final blend: score = alpha * circuit_rank + (1 - alpha) * stage2_rank
     alpha=1 → pure Stage 1 (circuit-adjusted grid); alpha=0 → pure Stage 2 (form + pace).
     """
-    x_circuit, delta1, stage2_rank = predict_components(
+    x_circuit, delta1, stage2_rank, signals_df = predict_components(
         stage1_model, circuit_map,
         quali_df, practice_pace, history_for_form, circuit_location,
     )
@@ -251,6 +265,7 @@ def predict_one(
     results = x_circuit[["driver", "team", "grid_position"]].copy()
     results = results.iloc[np.argsort(predicted_positions)].reset_index(drop=True)
     results["predicted_rank"] = results.index + 1
+    results = results.merge(signals_df, on="driver", how="left")
     return results
 
 
@@ -296,7 +311,8 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
         FP2 falls back to teammate pace when a driver's laps are all marked inaccurate.
 
     Final blend: score = alpha * circuit_rank + (1 - alpha) * stage2_rank.
-    alpha=0.60 tuned on Spearman rank correlation (0.806 vs grid baseline 0.640, 31 OOS races).
+    alpha=0.60 tuned on the walk-forward backtest (finishers MAE 2.08 vs grid
+    baseline 2.19, finishers Spearman 0.81, over 36 OOS races).
     """
     circuit_years = tuple(y for y in train_years if y != year)
     if not circuit_years:

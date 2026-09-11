@@ -48,9 +48,25 @@ def _ensure_cache_dir():
     fastf1.Cache.enable_cache(CACHE_DIR)
 
 
+def _count_completed_rounds(years) -> int:
+    """Count total completed rounds across the given years for cache-key freshness."""
+    now = datetime.now(timezone.utc)
+    total = 0
+    for year in sorted(years):
+        try:
+            sched = fastf1.get_event_schedule(year, include_testing=False)
+            total += int(
+                (pd.to_datetime(sched["EventDate"], utc=True) < now).sum()
+            )
+        except Exception:
+            pass
+    return total
+
+
 def _history_cache_path(train_years) -> str:
     key = "_".join(str(y) for y in sorted(train_years))
-    return os.path.join(CACHE_DIR, f"history_{key}_v3.pkl")
+    n = _count_completed_rounds(train_years)
+    return os.path.join(CACHE_DIR, f"history_{key}_r{n}_v3.pkl")
 
 
 def _session_cache_path(prefix: str, year: int, race) -> str:
@@ -130,6 +146,75 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
     return df
 
 
+# Reverse of _LOCATION_CANONICAL: canonical race name → OpenF1 location string.
+_RACE_TO_OPENF1_LOCATION: dict[str, str] = {v: k for k, v in _LOCATION_CANONICAL.items()}
+
+
+def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[str, str]) -> dict[str, int]:
+    """Return {driver_abbr: grid_position} from OpenF1 /v1/starting_grid.
+
+    This reflects the FIA-published starting grid AFTER penalties are applied,
+    and is available as soon as qualifying results are official — making it the
+    correct pre-race grid source when the race session hasn't run yet.
+    Falls back to {} on any network or parse failure.
+    """
+    try:
+        import requests
+
+        # Resolve OpenF1 location from canonical race name (e.g. "Italy" → "Monza").
+        location_hint = _RACE_TO_OPENF1_LOCATION.get(race, race)
+        race_lower = race.lower()
+        location_lower = location_hint.lower()
+
+        meetings = requests.get(
+            "https://api.openf1.org/v1/meetings",
+            params={"year": year},
+            timeout=10,
+        ).json()
+
+        meeting_key = None
+        for m in meetings:
+            m_loc = m.get("location", "").lower()
+            m_country = m.get("country_name", "").lower()
+            m_name = m.get("meeting_name", "").lower()
+            if location_lower in m_loc or race_lower in m_country or race_lower in m_name:
+                meeting_key = m["meeting_key"]
+                break
+
+        if meeting_key is None:
+            return {}
+
+        sessions = requests.get(
+            "https://api.openf1.org/v1/sessions",
+            params={"meeting_key": meeting_key, "session_type": "Qualifying"},
+            timeout=10,
+        ).json()
+        if not sessions:
+            return {}
+
+        session_key = sessions[0]["session_key"]
+
+        grid_data = requests.get(
+            "https://api.openf1.org/v1/starting_grid",
+            params={"session_key": session_key},
+            timeout=10,
+        ).json()
+        if not grid_data:
+            return {}
+
+        result = {}
+        for row in grid_data:
+            abbr = driver_num_to_abbr.get(str(row["driver_number"]))
+            if abbr:
+                result[abbr] = int(row["position"])
+
+        return result
+
+    except Exception as e:
+        print(f"  OpenF1 starting grid fetch failed: {e}")
+        return {}
+
+
 def fetch_race_grid(year: int, race) -> dict:
     """Return {driver_abbr: grid_position} from the race session, or {} if unavailable.
 
@@ -156,14 +241,12 @@ def fetch_race_grid(year: int, race) -> dict:
 def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFrame:
     """Load qualifying session — best of Q3/Q2/Q1 per driver.
 
-    Grid positions come from the race session results, not qualifying, because
-    grid penalties (e.g. gearbox, engine penalties) are applied after qualifying
-    and are only reflected in the race session's GridPosition. For races that
-    haven't happened yet the race session falls back gracefully to qualifying order.
-
-    Grid positions in the returned DataFrame reflect qualifying order. Callers
-    that have the race history available (predictor.run, backtest._collect_components)
-    overlay the penalty-corrected grid from load_history before using it.
+    Grid positions are penalty-corrected using a three-tier priority:
+      1. OpenF1 /v1/starting_grid — FIA-published grid with penalties, available
+         as soon as qualifying results are official (pre-race).
+      2. FastF1 race session GridPosition — post-race source, used as fallback
+         when OpenF1 is unavailable.
+      3. Qualifying order — last resort when neither source has data.
     """
     _ensure_cache_dir()
     cache_path = _session_cache_path("quali", year, race)
@@ -183,7 +266,18 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
     if results is None or results.empty:
         raise RuntimeError(f"No qualifying results found for {year} {race}")
 
-    actual_grid = fetch_race_grid(year, race)
+    # Build driver_number → abbreviation map for OpenF1 lookup.
+    driver_num_to_abbr = {
+        str(int(r.get("DriverNumber", 0))): r.get("Abbreviation", "")
+        for _, r in results.iterrows()
+        if r.get("Abbreviation", "")
+    }
+
+    # Try OpenF1 starting_grid first (penalty-corrected, available pre-race).
+    # Fall back to race session GridPosition (post-race only).
+    actual_grid = fetch_starting_grid_openf1(year, str(race), driver_num_to_abbr)
+    if not actual_grid:
+        actual_grid = fetch_race_grid(year, race)
 
     rows = []
     for _, driver in results.iterrows():

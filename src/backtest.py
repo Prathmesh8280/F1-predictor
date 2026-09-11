@@ -119,7 +119,7 @@ def _collect_components(history: pd.DataFrame, quali_cache: dict, practice_cache
             only_location=location if stage1_circuit_only else None,
         )
 
-        x_circuit, pred1, pred2 = predict_components(
+        x_circuit, pred1, pred2, _ = predict_components(
             stage1_model, circuit_map,
             quali_df, practice_cache.get((year, rnd)), season_train, location,
         )

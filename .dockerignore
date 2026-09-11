@@ -1,0 +1,14 @@
+.venv/
+venv/
+frontend/
+__pycache__/
+*.py[cod]
+.git/
+.claude/
+*.md
+data/fastf1_http_cache*
+data/2024/
+data/2025/
+data/2026/
+data/logos/
+data/backtest_summary.json
