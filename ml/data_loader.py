@@ -172,8 +172,13 @@ def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[st
             timeout=10,
         ).json()
 
+        if not isinstance(meetings, list):
+            return {}
+
         meeting_key = None
         for m in meetings:
+            if not isinstance(m, dict):
+                continue
             m_loc = m.get("location", "").lower()
             m_country = m.get("country_name", "").lower()
             m_name = m.get("meeting_name", "").lower()
@@ -189,7 +194,7 @@ def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[st
             params={"meeting_key": meeting_key, "session_type": "Qualifying"},
             timeout=10,
         ).json()
-        if not sessions:
+        if not isinstance(sessions, list) or not sessions:
             return {}
 
         session_key = sessions[0]["session_key"]
@@ -199,13 +204,15 @@ def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[st
             params={"session_key": session_key},
             timeout=10,
         ).json()
-        if not grid_data:
+        if not isinstance(grid_data, list) or not grid_data:
             return {}
 
         result = {}
         for row in grid_data:
-            abbr = driver_num_to_abbr.get(str(row["driver_number"]))
-            if abbr:
+            if not isinstance(row, dict):
+                continue
+            abbr = driver_num_to_abbr.get(str(row.get("driver_number", "")))
+            if abbr and row.get("position") is not None:
                 result[abbr] = int(row["position"])
 
         return result
