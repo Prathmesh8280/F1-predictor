@@ -508,6 +508,11 @@ def load_actual_results(year: int, race: str) -> pd.DataFrame | None:
         res = session.results
         if res is None or res.empty:
             return None
+        # FastF1 creates a stub race session before the race runs with all
+        # Position values as NaN. Require at least one real position to confirm
+        # the race has actually finished.
+        if res["Position"].isna().all():
+            return None
         rows = []
         for _, driver in res.iterrows():
             pos = driver.get("Position")
