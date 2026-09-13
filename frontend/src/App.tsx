@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 
 import SiteNav from './components/layout/SiteNav'
 import SiteFooter from './components/layout/SiteFooter'
@@ -21,6 +22,7 @@ export default function App() {
       </main>
 
       <SiteFooter />
+      <Analytics />
     </div>
   )
 }
