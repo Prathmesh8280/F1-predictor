@@ -32,7 +32,10 @@ def generate_prediction(race: str, year: int, force_refresh: bool = False) -> di
     """
     cache_key = (race, year)
 
-    if not force_refresh and cache_key in _pred_cache:
+    # Only serve from cache if the race was already completed when cached.
+    # Incomplete predictions are never cached so a re-request always re-checks
+    # FastF1 for actual results without needing an explicit force_refresh.
+    if not force_refresh and cache_key in _pred_cache and _pred_cache[cache_key]["is_completed"]:
         return _pred_cache[cache_key]
 
     results, backtest = run(race=race, year=year, force_refresh=force_refresh)
