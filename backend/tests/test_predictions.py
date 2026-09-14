@@ -67,14 +67,36 @@ def test_cache_prevents_second_pipeline_run(monkeypatch):
         calls["n"] += 1
         return _fake_results(), _fake_backtest()
 
+    fake_actuals = pd.DataFrame([
+        {"driver": "LEC", "actual_position": 1},
+        {"driver": "RUS", "actual_position": 2},
+    ])
+
     monkeypatch.setattr(svc, "run", counting_run)
-    monkeypatch.setattr(svc.dl, "load_actual_results", lambda year, race: None)
+    # Completed race → result gets cached → second call is a cache hit
+    monkeypatch.setattr(svc.dl, "load_actual_results", lambda year, race: fake_actuals)
 
     svc.generate_prediction("Italy", 2026)
     svc.generate_prediction("Italy", 2026)  # served from cache
     assert calls["n"] == 1
 
     svc.generate_prediction("Italy", 2026, force_refresh=True)  # bypasses cache
+    assert calls["n"] == 2
+
+
+def test_incomplete_race_not_cached(monkeypatch):
+    calls = {"n": 0}
+
+    def counting_run(**kw):
+        calls["n"] += 1
+        return _fake_results(), _fake_backtest()
+
+    monkeypatch.setattr(svc, "run", counting_run)
+    # Race not finished → never cached → every request re-runs pipeline
+    monkeypatch.setattr(svc.dl, "load_actual_results", lambda year, race: None)
+
+    svc.generate_prediction("Italy", 2026)
+    svc.generate_prediction("Italy", 2026)
     assert calls["n"] == 2
 
 
