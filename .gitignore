@@ -44,6 +44,7 @@ frontend.zip
 # ── Planning docs (not part of the app) ──────────────────────────────────────
 F1_Predictor_*.md
 PRODUCT.md
+docs/
 
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
