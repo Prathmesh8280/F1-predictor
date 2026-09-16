@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Main body -->
+  <path d="M8 36 L10 32 L14 30 L18 28 L28 27 L34 26 L40 27 L46 29 L50 31 L52 34 L52 37 L46 37 L44 36 L20 36 L18 37 L12 37 Z" fill="#0D0D14"/>
+  <!-- Cockpit cutout / canopy area -->
+  <path d="M27 27 L29 24 L35 24 L37 27 Z" fill="#0D0D14"/>
+  <!-- Halo -->
+  <rect x="29" y="23" width="6" height="2" rx="1" fill="#0D0D14"/>
+  <!-- Nose cone -->
+  <path d="M8 36 L10 32 L6 33 L4 35 L5 37 L8 37 Z" fill="#0D0D14"/>
+  <!-- Front wing -->
+  <path d="M4 37 L3 38 L10 38 L10 37 Z" fill="#0D0D14"/>
+  <!-- Rear wing post -->
+  <rect x="47" y="27" width="3" height="5" fill="#0D0D14"/>
+  <!-- Rear wing blade -->
+  <rect x="44" y="25" width="10" height="3" rx="1" fill="#0D0D14"/>
+  <!-- Front wheel -->
+  <circle cx="16" cy="38" r="5" fill="#0D0D14"/>
+  <circle cx="16" cy="38" r="2" fill="white"/>
+  <!-- Rear wheel -->
+  <circle cx="46" cy="38" r="6" fill="#0D0D14"/>
+  <circle cx="46" cy="38" r="2.5" fill="white"/>
+</svg>

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://f1racepredict.vercel.app/sitemap.xml
