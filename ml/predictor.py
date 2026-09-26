@@ -375,10 +375,14 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
     else:
         grid_map = fetch_race_grid(year, race)
 
-    if grid_map:
+    # Only overlay real, positive grid slots. A source that yields non-positive
+    # placeholders (e.g. FastF1's -1 for races missing grid data) must never
+    # overwrite the authoritative qualifying grid.
+    valid_grid = {d: int(g) for d, g in grid_map.items() if g is not None and g > 0}
+    if valid_grid:
         quali_df = quali_df.copy()
         quali_df["grid_position"] = (
-            quali_df["driver"].map(grid_map).fillna(quali_df["grid_position"]).astype(int)
+            quali_df["driver"].map(valid_grid).fillna(quali_df["grid_position"]).astype(int)
         )
 
     practice_pace    = load_practice_pace(year, race, force_refresh=force_refresh)

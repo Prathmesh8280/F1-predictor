@@ -134,7 +134,7 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
                     "location": location,
                     "driver": driver.get("Abbreviation", ""),
                     "team": driver.get("TeamName", ""),
-                    "grid_position": int(grid) if not pd.isna(grid) else 20,
+                    "grid_position": int(grid) if (not pd.isna(grid) and int(grid) > 0) else 20,
                     "finish_position": position,
                     "finished": finished,
                 })
@@ -236,10 +236,16 @@ def fetch_race_grid(year: int, race) -> dict:
         res = race_session.results
         if res is None or res.empty:
             return {}
+        # FastF1 reports GridPosition as -1 (or 0) when the source has no grid
+        # data yet — common for very recent races that have results but no
+        # published grid. Treat those as missing so callers keep the real
+        # qualifying grid instead of a corrupted all-equal one.
         return {
             r.get("Abbreviation", ""): int(r.get("GridPosition"))
             for _, r in res.iterrows()
-            if r.get("Abbreviation", "") and not pd.isna(r.get("GridPosition"))
+            if r.get("Abbreviation", "")
+            and not pd.isna(r.get("GridPosition"))
+            and int(r.get("GridPosition")) > 0
         }
     except Exception:
         return {}
