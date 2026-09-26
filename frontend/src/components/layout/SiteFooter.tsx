@@ -1,3 +1,4 @@
+import { NavLink } from 'react-router-dom'
 import { Github, Linkedin } from 'lucide-react'
 
 export default function SiteFooter() {
@@ -15,6 +16,13 @@ export default function SiteFooter() {
           </div>
 
           <div className="flex items-center gap-4">
+            <NavLink
+              to="/new-to-f1"
+              className="font-label text-xs text-muted hover:text-ink transition-colors focus-visible:outline-accent"
+            >
+              New to F1?
+            </NavLink>
+            <span className="text-border">·</span>
             <a
               href="https://github.com/Prathmesh8280/F1-predictor"
               target="_blank"

@@ -1,5 +1,6 @@
 import type { PredictionResponse, PredictionRow } from '../../types'
 import { driverDisplay } from '../../constants/drivers'
+import { podiumHitCount, bestCall as computeBestCall, biggestMiss as computeBiggestMiss } from '../../lib/predictionBriefing'
 
 interface Props {
   data: PredictionResponse
@@ -38,17 +39,13 @@ export default function PerformancePanel({ data }: Props) {
 
   const exact = completed.filter(r => r.rank === r.actual_rank!).length
   const withinOne = completed.filter(r => Math.abs(r.rank - r.actual_rank!) <= 1).length
-  const actualTop3 = new Set(completed.filter(r => r.actual_rank! <= 3).map(r => r.driver))
-  const podiumHits = completed.filter(r => r.rank <= 3 && actualTop3.has(r.driver)).length
+  const podiumHits = podiumHitCount(data.predictions)
 
   const actualWinner = completed.find(r => r.actual_rank === 1)
   const winnerCorrect = actualWinner != null && actualWinner.rank === 1
 
-  const withErr = completed
-    .map(r => ({ row: r, err: Math.abs(r.rank - r.actual_rank!) }))
-    .sort((a, b) => a.err - b.err)
-  const bestCall = withErr[0]
-  const biggestMiss = withErr[withErr.length - 1]
+  const bestCall = computeBestCall(data.predictions)
+  const biggestMiss = computeBiggestMiss(data.predictions)
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 flex flex-col gap-6">

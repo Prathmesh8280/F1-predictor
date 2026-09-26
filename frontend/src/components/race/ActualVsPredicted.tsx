@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PredictionRow } from '../../types'
 import TeamBadge from '../ui/TeamBadge'
 import { driverDisplay } from '../../constants/drivers'
+import { ordinal } from '../../lib/predictionSignals'
 import { useInView } from '../../hooks/useInView'
 
 interface ActualVsPredictedProps {
@@ -31,7 +32,7 @@ function ErrorBadge({ err }: { err: number }) {
                 'bg-negative/10 text-negative'
   return (
     <span className={`inline-block font-data font-semibold text-xs px-2 py-0.5 rounded-full ${cls}`}>
-      {err === 0 ? '✓' : `±${err}`}
+      {err === 0 ? '✓' : `${err} place${err === 1 ? '' : 's'}`}
     </span>
   )
 }
@@ -75,7 +76,7 @@ export default function ActualVsPredicted({ predictions }: ActualVsPredictedProp
   if (completed.length === 0) return null
 
   return (
-    <section className="max-w-6xl mx-auto px-4 sm:px-6 py-10 border-t border-border">
+    <section className="max-w-6xl mx-auto px-4 sm:px-6 py-8 border-t border-border">
       <div ref={wrapRef} className="mb-6">
         <p className="font-label font-semibold text-[11px] tracking-widest uppercase text-accent mb-1">
           Full Comparison
@@ -84,7 +85,7 @@ export default function ActualVsPredicted({ predictions }: ActualVsPredictedProp
           ACTUAL VS PREDICTED
         </h2>
         <p className="font-body text-sm text-muted mt-1">
-          Rows start in predicted order and slide to where drivers actually finished.
+          See where the model was right, where it was close, and where the race surprised it.
         </p>
       </div>
 
@@ -93,11 +94,11 @@ export default function ActualVsPredicted({ predictions }: ActualVsPredictedProp
         <table className="w-full" role="table">
           <thead>
             <tr className="border-b border-border bg-ground/50">
-              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Actual</th>
+              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Actual Finish</th>
               <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Driver</th>
               <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Team</th>
               <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Predicted</th>
-              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Error</th>
+              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Difference</th>
             </tr>
           </thead>
           {sorted.map((row, actualIndex) => {
@@ -141,7 +142,7 @@ export default function ActualVsPredicted({ predictions }: ActualVsPredictedProp
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="font-data text-sm text-muted">P{row.rank}</span>
+                    <span className="font-data text-sm text-muted">{ordinal(row.rank)}</span>
                   </td>
                   <td className="px-4 py-3" style={revealStyle}>
                     <ErrorBadge err={err} />
@@ -192,7 +193,7 @@ export default function ActualVsPredicted({ predictions }: ActualVsPredictedProp
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1" style={revealStyle}>
-                <span className="font-data text-xs text-muted">Pred P{row.rank}</span>
+                <span className="font-data text-xs text-muted">Predicted {ordinal(row.rank)}</span>
                 <ErrorBadge err={err} />
               </div>
             </div>

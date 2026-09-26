@@ -1,8 +1,16 @@
 import type { PredictionRow } from '../types'
+import { driverDisplay } from '../constants/drivers'
 
 // All helpers here derive strictly from real model outputs on PredictionRow.
 // Nothing is invented — a reason only appears when the underlying signal
 // actually supports the predicted direction (spec §6, §32).
+
+/** 1 → "1st", 2 → "2nd", 16 → "16th". */
+export function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`
+}
 
 export interface Mover {
   row: PredictionRow
@@ -69,6 +77,52 @@ export function signalSummary(r: PredictionRow): SignalLine[] {
     if (r.constructor_rank != null) lines.push({ label: 'Constructor', value: `P${r.constructor_rank}` })
   }
   return lines
+}
+
+export interface ReasonBlock {
+  title: string
+  body: string
+}
+
+/**
+ * Up to three plain-language reasons behind the predicted winner's result,
+ * each backed by a real signal on the row. Starting position always applies;
+ * pace and season-form reasons appear only when those signals exist (e.g. not
+ * on Round 1). Nothing is fabricated.
+ */
+export function winnerReasons(r: PredictionRow): ReasonBlock[] {
+  const name = driverDisplay(r.driver)
+  const blocks: ReasonBlock[] = []
+
+  // 1 — Starting position (always available).
+  let startBody: string
+  if (r.grid_pos === 1) {
+    startBody = `${name} starts from pole — the strongest starting position, with no cars ahead to overtake.`
+  } else if (r.grid_pos <= 3) {
+    startBody = `${name} starts ${ordinal(r.grid_pos)} on the grid, near the front and within reach of the lead.`
+  } else {
+    startBody = `${name} starts ${ordinal(r.grid_pos)}, and the model expects race pace to recover ground from there.`
+  }
+  blocks.push({ title: 'Starting Position', body: startBody })
+
+  // 2 — Weekend pace (only when the FP2/Sprint signal exists).
+  if (r.fp2_pace_rank != null) {
+    const body = r.fp2_pace_rank <= 3
+      ? `${r.team} showed strong long-run pace this weekend, ranking ${ordinal(r.fp2_pace_rank)} fastest.`
+      : `${r.team}'s weekend long-run pace ranked ${ordinal(r.fp2_pace_rank)}, which the model factors in.`
+    blocks.push({ title: 'Weekend Pace', body })
+  }
+
+  // 3 — Season form (only when standings exist).
+  if (r.championship_rank != null || r.constructor_rank != null) {
+    const parts: string[] = []
+    if (r.championship_rank != null) parts.push(`${ordinal(r.championship_rank)} in the drivers' championship`)
+    if (r.constructor_rank != null) parts.push(`${ordinal(r.constructor_rank)} among constructors`)
+    const joined = parts.length === 2 ? `${parts[0]} and ${parts[1]}` : parts[0]
+    blocks.push({ title: 'Season Form', body: `${name} sits ${joined}, reinforcing the prediction.` })
+  }
+
+  return blocks.slice(0, 3)
 }
 
 /** One-sentence, data-honest summary of a driver's predicted movement. */

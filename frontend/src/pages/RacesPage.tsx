@@ -13,6 +13,9 @@ import RaceStory from '../components/race/RaceStory'
 import RaceSummaryPanel from '../components/race/RaceSummaryPanel'
 import PerformancePanel from '../components/race/PerformancePanel'
 import ActualVsPredicted from '../components/race/ActualVsPredicted'
+import RaceBriefing from '../components/race/RaceBriefing'
+import RaceInThirtySeconds from '../components/race/RaceInThirtySeconds'
+import ResultInThirtySeconds from '../components/race/ResultInThirtySeconds'
 import LastRaceCard from '../components/race/LastRaceCard'
 import type { LastRaceStatus } from '../components/race/LastRaceCard'
 import LoadingState from '../components/ui/LoadingState'
@@ -436,20 +439,23 @@ export default function RacesPage() {
           {appState.data.is_completed ? (
             // ── COMPLETED RACE: dashboard layout ─────────────────────────────
             <>
-              <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+              <ResultInThirtySeconds data={appState.data} />
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <RaceSummaryPanel data={appState.data} />
                   <PerformancePanel data={appState.data} />
                 </div>
               </div>
               <CircuitContext data={appState.data} />
+              <RaceStory data={appState.data} />
               <ActualVsPredicted predictions={appState.data.predictions} />
-              <RaceStory predictions={appState.data.predictions} />
             </>
           ) : (
             // ── PRE-RACE: prediction analysis ─────────────────────────────────
             <>
-              <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+              <RaceBriefing data={appState.data} />
+              <RaceInThirtySeconds data={appState.data} />
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <PredictionSummaryPanel data={appState.data} />
                   <PredictionContextPanel data={appState.data} />

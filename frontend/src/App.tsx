@@ -6,6 +6,7 @@ import SiteFooter from './components/layout/SiteFooter'
 import RacesPage from './pages/RacesPage'
 import HowItWorksPage from './pages/HowItWorksPage'
 import AboutPage from './pages/AboutPage'
+import NewToF1Page from './pages/NewToF1Page'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/" element={<RacesPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/new-to-f1" element={<NewToF1Page />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

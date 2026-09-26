@@ -129,7 +129,7 @@ export default function AboutPage() {
                 to="/how-it-works"
                 className="inline-flex items-center gap-2 font-label font-semibold text-sm tracking-widest uppercase text-ink border border-border px-5 py-2.5 rounded-lg hover:border-ink transition-colors focus-visible:outline-accent"
               >
-                Explore How It Works →
+                Explore The Model →
               </Link>
             </div>
 

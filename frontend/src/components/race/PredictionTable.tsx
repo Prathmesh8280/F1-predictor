@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PredictionRow } from '../../types'
 import TeamBadge from '../ui/TeamBadge'
 import { driverDisplay } from '../../constants/drivers'
+import { ordinal } from '../../lib/predictionSignals'
 import { useInView } from '../../hooks/useInView'
 
 interface PredictionTableProps {
@@ -52,12 +53,12 @@ function ExpandedRow({ row }: { row: PredictionRow }) {
     <div className="px-4 sm:px-6 py-4 bg-ground/50 border-t border-border">
       <dl className="flex flex-wrap gap-x-6 gap-y-2">
         <div>
-          <dt className="font-label text-[10px] tracking-widest uppercase text-muted">Grid</dt>
-          <dd className="font-data font-semibold text-sm text-ink">P{row.grid_pos}</dd>
+          <dt className="font-label text-[10px] tracking-widest uppercase text-muted">Starts</dt>
+          <dd className="font-data font-semibold text-sm text-ink">{ordinal(row.grid_pos)}</dd>
         </div>
         <div>
-          <dt className="font-label text-[10px] tracking-widest uppercase text-muted">Predicted</dt>
-          <dd className="font-data font-semibold text-sm text-ink">P{row.rank}</dd>
+          <dt className="font-label text-[10px] tracking-widest uppercase text-muted">Predicted Finish</dt>
+          <dd className="font-data font-semibold text-sm text-ink">{ordinal(row.rank)}</dd>
         </div>
         {signals.length > 0 && (
           <>
@@ -112,7 +113,7 @@ export default function PredictionTable({ predictions }: PredictionTableProps) {
   }
 
   return (
-    <section id="full-order" className="scroll-mt-20 max-w-6xl mx-auto px-4 sm:px-6 py-10 border-t border-border">
+    <section id="full-order" className="scroll-mt-20 max-w-6xl mx-auto px-4 sm:px-6 py-8 border-t border-border">
       <div ref={wrapRef} className="mb-6">
         <p className="font-label font-semibold text-[11px] tracking-widest uppercase text-accent mb-1">
           Full Prediction
@@ -121,6 +122,9 @@ export default function PredictionTable({ predictions }: PredictionTableProps) {
           PREDICTED RACE ORDER
         </h2>
         <p className="font-body text-sm text-muted mt-1">
+          The model predicts where each driver will finish. Their starting position comes from qualifying.
+        </p>
+        <p className="font-label text-xs text-muted mt-1">
           Click any row to see model signals.
         </p>
       </div>
@@ -130,11 +134,11 @@ export default function PredictionTable({ predictions }: PredictionTableProps) {
         <table className="w-full" role="table">
           <thead>
             <tr className="border-b border-border bg-ground/50">
-              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">POS</th>
+              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Predicted Finish</th>
               <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Driver</th>
               <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Team</th>
-              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Grid</th>
-              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Change</th>
+              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Starts</th>
+              <th className="px-4 py-3 text-left font-label text-[10px] tracking-widest uppercase text-muted font-semibold">Move</th>
             </tr>
           </thead>
           {sorted.map((row, predIndex) => {
@@ -186,7 +190,7 @@ export default function PredictionTable({ predictions }: PredictionTableProps) {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="font-data text-sm text-muted">P{row.grid_pos}</span>
+                    <span className="font-data text-sm text-muted">{ordinal(row.grid_pos)}</span>
                   </td>
                   <td className="px-4 py-3">
                     <DeltaCell delta={delta} />
@@ -251,7 +255,7 @@ export default function PredictionTable({ predictions }: PredictionTableProps) {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="font-data text-xs text-muted">Grid P{row.grid_pos}</span>
+                  <span className="font-data text-xs text-muted">Starts {ordinal(row.grid_pos)}</span>
                   <DeltaCell delta={delta} />
                 </div>
               </button>

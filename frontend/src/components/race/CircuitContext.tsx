@@ -20,7 +20,7 @@ export default function CircuitContext({ data }: CircuitContextProps) {
   const imgUrl = meta?.trackImgUrl ?? circuitInfo.track_img_url
 
   return (
-    <section className="max-w-6xl mx-auto px-4 sm:px-6 py-10 border-t border-border">
+    <section className="max-w-6xl mx-auto px-4 sm:px-6 py-8 border-t border-border">
       <div className="bg-surface border border-border rounded-2xl p-6">
         <div className="mb-5">
           <p className="font-label font-semibold text-[11px] tracking-widest uppercase text-accent mb-1">

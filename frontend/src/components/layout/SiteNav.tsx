@@ -4,7 +4,8 @@ import { Menu, X } from 'lucide-react'
 
 const NAV_LINKS = [
   { to: '/', label: 'RACES' },
-  { to: '/how-it-works', label: 'HOW IT WORKS' },
+  { to: '/new-to-f1', label: 'NEW TO F1?' },
+  { to: '/how-it-works', label: 'THE MODEL' },
   { to: '/about', label: 'ABOUT' },
 ]
 
@@ -36,7 +37,7 @@ export default function SiteNav() {
               end={to === '/'}
               className={({ isActive }) =>
                 `font-label font-semibold text-xs tracking-widest transition-colors ${
-                  isActive ? 'text-white' : 'text-white/45 hover:text-white/75'
+                  isActive ? 'text-accent' : 'text-white/45 hover:text-white/75'
                 }`
               }
             >
@@ -69,7 +70,7 @@ export default function SiteNav() {
               end={to === '/'}
               className={({ isActive }) =>
                 `font-label font-semibold text-sm tracking-widest py-2 border-b border-white/10 transition-colors ${
-                  isActive ? 'text-white' : 'text-white/50 hover:text-white/80'
+                  isActive ? 'text-accent' : 'text-white/50 hover:text-white/80'
                 }`
               }
               onClick={() => setOpen(false)}

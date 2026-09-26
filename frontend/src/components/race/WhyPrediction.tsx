@@ -1,19 +1,20 @@
 import type { PredictionRow } from '../../types'
-import { signalSummary, predictionSentence } from '../../lib/predictionSignals'
+import { signalSummary, winnerReasons } from '../../lib/predictionSignals'
+import { driverDisplay } from '../../constants/drivers'
 
 interface WhyPredictionProps {
   predictions: PredictionRow[]
 }
 
 export default function WhyPrediction({ predictions }: WhyPredictionProps) {
-  const winner = predictions.find(p => p.rank === 1)
+  const winner = [...predictions].sort((a, b) => a.rank - b.rank)[0]
   if (!winner) return null
 
-  const sentence = predictionSentence(winner)
+  const reasons = winnerReasons(winner)
   const signals = signalSummary(winner)
 
   return (
-    <section className="max-w-6xl mx-auto px-4 sm:px-6 py-10 border-t border-border">
+    <section className="max-w-6xl mx-auto px-4 sm:px-6 py-8 border-t border-border">
       <div className="mb-6">
         <p className="font-label font-semibold text-[11px] tracking-widest uppercase text-accent mb-1">
           Model Reasoning
@@ -21,23 +22,33 @@ export default function WhyPrediction({ predictions }: WhyPredictionProps) {
         <h2 className="font-display font-bold text-xl text-ink tracking-tight">
           WHY THE MODEL THINKS THIS
         </h2>
+        <p className="font-body text-sm text-muted mt-1">
+          The model's prediction for {driverDisplay(winner.driver)} rests on a few key factors.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Explanation */}
-        <div>
-          <p className="font-body text-fluid-lead text-ink leading-relaxed mb-2">
-            {sentence}
-          </p>
-          <p className="font-body text-sm text-muted">
-            The model weighs qualifying position alongside current season form, constructor strength, weekend pace, and circuit-specific historical effects.
-          </p>
-        </div>
+        {/* Numbered reasons */}
+        <ol className="space-y-5">
+          {reasons.map((r, i) => (
+            <li key={r.title} className="flex gap-4">
+              <span className="font-data font-black text-lg text-accent/30 leading-none shrink-0 w-8">
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <div>
+                <p className="font-label font-bold text-xs tracking-widest uppercase text-ink mb-1">
+                  {r.title}
+                </p>
+                <p className="font-body text-sm text-muted leading-relaxed">{r.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
 
-        {/* Signal grid */}
+        {/* Supporting model signals */}
         <div>
           <p className="font-label font-semibold text-[10px] tracking-widest uppercase text-muted mb-3">
-            Signals for {winner.driver.toUpperCase()}
+            Model Signals
           </p>
           <dl className="space-y-2">
             {signals.map(({ label, value }) => (

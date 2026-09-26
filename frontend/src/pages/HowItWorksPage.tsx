@@ -26,7 +26,7 @@ export default function HowItWorksPage() {
             Methodology
           </p>
           <h1 className="font-display font-black text-3xl sm:text-5xl tracking-tight mb-6">
-            HOW IT WORKS
+            THE MODEL
           </h1>
           <p className="font-body text-fluid-lead text-white/60 max-w-xl">
             Once qualifying sets the grid, a two-stage machine learning model takes over — combining circuit history, driver form, team performance, and weekend pace to predict how the race will unfold. No live data, no guesswork mid-race. Everything is decided before lights-out.
@@ -85,7 +85,7 @@ export default function HowItWorksPage() {
 
         <Section number="04" title="TWO-STAGE MODEL">
           <p className="font-body text-sm text-muted leading-relaxed mb-4">
-            The model uses two sequential Ridge regression stages:
+            The model runs two stages and blends their rankings — 60% circuit baseline, 40% season form:
           </p>
           <div className="space-y-4">
             <div className="bg-surface border border-border rounded-xl p-5">
@@ -95,14 +95,14 @@ export default function HowItWorksPage() {
               </p>
             </div>
             <div className="bg-surface border border-border rounded-xl p-5">
-              <p className="font-label font-semibold text-[10px] tracking-widest uppercase text-accent mb-2">Stage 2 — Season Form Adjustment</p>
+              <p className="font-label font-semibold text-[10px] tracking-widest uppercase text-accent mb-2">Stage 2 — Season Form</p>
               <p className="font-body text-sm text-muted leading-relaxed">
-                Adjusts the Stage 1 baseline using current-season information: championship standing, constructor form, and weekend pace. This is skipped when standings data isn't available (e.g. the season opener).
+                Ranks drivers by current-season form — a weighted blend of championship standing (35%), constructor form (35%), and FP2 weekend pace (30%). On the season opener, with no standings yet, it falls back to FP2 pace alone.
               </p>
             </div>
             <div className="bg-ground border border-border rounded-lg p-4">
               <p className="font-body text-xs text-muted">
-                Both stages use <strong>Ridge regression</strong> — not neural networks, not XGBoost, not a "custom AI engine." Regularized linear regression is appropriate for this problem: small training sets, correlated features, and a need for interpretability.
+                Stage 1 uses <strong>Ridge regression</strong>; Stage 2 is a transparent <strong>weighted ranking</strong> of season-form signals — no neural networks, no XGBoost, no "custom AI engine." Regularized linear regression and calibrated weighted signals suit this problem: small training sets, correlated features, and a need for interpretability.
               </p>
             </div>
           </div>
@@ -118,7 +118,7 @@ export default function HowItWorksPage() {
                 { label: 'F1 DATA', sub: 'FastF1 · Historical + current season results' },
                 { label: 'FEATURE ENGINEERING', sub: 'Grid position, standings, FP2 pace, circuit effects' },
                 { label: 'STAGE 1 — CIRCUIT BASELINE', sub: 'Ridge regression trained on historical circuit data' },
-                { label: 'STAGE 2 — SEASON FORM', sub: 'Adjusts baseline with current-season driver & team form' },
+                { label: 'STAGE 2 — SEASON FORM', sub: 'Weighted ranking of driver & team form, blended with Stage 1' },
                 { label: 'FASTAPI BACKEND', sub: 'Serves predictions + race schedule via REST endpoints' },
                 { label: 'REACT FRONTEND', sub: 'Displays predicted order, circuit context, post-race review' },
               ].map(({ label, sub }, i, arr) => (
@@ -165,16 +165,16 @@ export default function HowItWorksPage() {
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-surface border border-border rounded-lg p-4">
-              <p className="font-label text-[10px] tracking-widest uppercase text-muted mb-1">Our model MAE</p>
+              <p className="font-label text-[10px] tracking-widest uppercase text-muted mb-1">Our model MAE (finishers)</p>
               <p className="font-data font-bold text-2xl text-ink">2.08</p>
             </div>
             <div className="bg-surface border border-border rounded-lg p-4">
-              <p className="font-label text-[10px] tracking-widest uppercase text-muted mb-1">Qualifying baseline MAE</p>
+              <p className="font-label text-[10px] tracking-widest uppercase text-muted mb-1">Qualifying baseline (finishers)</p>
               <p className="font-data font-bold text-2xl text-muted">2.19</p>
             </div>
           </div>
           <p className="font-body text-xs text-muted mt-3">
-            Qualifying order is already a strong predictor of race finish. The model improves on that baseline by ~5%.
+            Measured across classified finishers (positions where a driver completed the race). Qualifying order is already a strong predictor of race finish; the model improves on that baseline by ~5%. DNFs, caused by incidents or mechanical failures, aren't predictable from pre-race data and are excluded here.
           </p>
         </Section>
 
