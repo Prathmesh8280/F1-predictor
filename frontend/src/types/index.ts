@@ -34,6 +34,7 @@ export interface RaceEntry {
   round: number
   date: string
   status: 'completed' | 'current'
+  winner?: string | null
 }
 
 export type AppState =

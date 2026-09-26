@@ -5,7 +5,19 @@ from datetime import date, timedelta
 
 import fastf1
 
+import ml.data_loader as dl
 from backend.app.constants import CIRCUIT_META, EVENTNAME_KEYWORD, FF1_TO_KEY, ROUND_MAP
+
+
+def _winners_by_round(year: int) -> dict[int, str]:
+    """Map each completed round to its winning driver, from the cached history
+    pkl. Returns an empty map if history is unavailable (winner is optional)."""
+    try:
+        hist = dl.load_history(train_years=(year,))
+    except Exception:
+        return {}
+    winners = hist[hist["finish_position"] == 1]
+    return {int(r): str(d) for r, d in zip(winners["round"], winners["driver"])}
 
 
 def ff1_to_race_key(country: str, event_name: str, year: int = 0, round_num: int = 0) -> str | None:
@@ -40,6 +52,7 @@ def list_races(year: int) -> list[dict]:
 
     today = date.today()
     cutoff = today + timedelta(days=4)  # include up to ~end of current race weekend
+    winners = _winners_by_round(year)
 
     races = []
     for _, ev in schedule.iterrows():
@@ -62,6 +75,7 @@ def list_races(year: int) -> list[dict]:
             "round": round_num,
             "date": str(event_date),
             "status": status,
+            "winner": winners.get(round_num),
         })
 
     return sorted(races, key=lambda r: r["round"])

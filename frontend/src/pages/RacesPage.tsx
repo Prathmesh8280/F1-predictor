@@ -407,9 +407,7 @@ export default function RacesPage() {
           selectedRace={selectedRace}
           year={YEAR}
           onRaceChange={handleRaceChange}
-          onPredict={handlePredict}
           loading={appState.phase === 'loading'}
-          hasPrediction={appState.phase === 'success'}
           isPreQualifying={isPreQualifying}
         />
       )}

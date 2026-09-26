@@ -35,15 +35,15 @@ def test_unknown_country_returns_none():
 
 def test_races_route_shapes_and_validates(client, monkeypatch):
     fixture = [
-        {"name": "Australia", "round": 1, "date": "2026-03-08", "status": "completed"},
-        {"name": "Madrid",    "round": 14, "date": "2026-09-13", "status": "current"},
+        {"name": "Australia", "round": 1, "date": "2026-03-08", "status": "completed", "winner": "VER"},
+        {"name": "Madrid",    "round": 14, "date": "2026-09-13", "status": "current", "winner": None},
     ]
     monkeypatch.setattr("backend.app.routes.races.list_races", lambda year: fixture)
     resp = client.get("/races?year=2026")
     assert resp.status_code == 200
     body = resp.json()
     assert body == fixture
-    assert {"name", "round", "date", "status"} == set(body[0].keys())
+    assert {"name", "round", "date", "status", "winner"} == set(body[0].keys())
 
 
 def test_races_route_500_on_service_error(client, monkeypatch):
