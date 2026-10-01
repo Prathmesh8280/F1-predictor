@@ -5,7 +5,7 @@ predicts each driver's finishing position from qualifying, practice pace, and
 season form. Served by a FastAPI backend and a React + TypeScript frontend with
 animated visualisations.
 
-Live at: *(deploy URL here)*
+Live at: https://f1racepredict.vercel.app/
 
 ---
 
