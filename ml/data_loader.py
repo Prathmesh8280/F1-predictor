@@ -191,9 +191,20 @@ def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[st
 
         sessions = requests.get(
             "https://api.openf1.org/v1/sessions",
-            params={"meeting_key": meeting_key, "session_type": "Qualifying"},
+            params={"meeting_key": meeting_key},
             timeout=10,
         ).json()
+
+        qualifying_sessions = [
+            s for s in sessions
+            if s.get("session_name") == "Qualifying"
+        ]
+
+        if not qualifying_sessions:
+            return {}
+
+        session_key = qualifying_sessions[0]["session_key"]
+
         if not isinstance(sessions, list) or not sessions:
             return {}
 
@@ -252,14 +263,14 @@ def fetch_race_grid(year: int, race) -> dict:
 
 
 def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFrame:
-    """Load qualifying session — best of Q3/Q2/Q1 per driver.
+    """Load GP qualifying and determine the GP starting grid.
 
-    Grid positions are penalty-corrected using a three-tier priority:
-      1. OpenF1 /v1/starting_grid — FIA-published grid with penalties, available
-         as soon as qualifying results are official (pre-race).
-      2. FastF1 race session GridPosition — post-race source, used as fallback
-         when OpenF1 is unavailable.
-      3. Qualifying order — last resort when neither source has data.
+    Priority:
+      1. Complete, valid OpenF1 official GP grid, including applicable penalties.
+      2. GP qualifying classification as a provisional fallback.
+
+    Never use Sprint qualifying or Sprint race positions as the GP grid.
+    Never use a race-session fallback without validating its provenance.
     """
     _ensure_cache_dir()
     cache_path = _session_cache_path("quali", year, race)
@@ -288,9 +299,43 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
 
     # Try OpenF1 starting_grid first (penalty-corrected, available pre-race).
     # Fall back to race session GridPosition (post-race only).
-    actual_grid = fetch_starting_grid_openf1(year, str(race), driver_num_to_abbr)
-    if not actual_grid:
-        actual_grid = fetch_race_grid(year, race)
+    actual_grid = fetch_starting_grid_openf1(
+        year, str(race), driver_num_to_abbr
+    )
+
+    expected_drivers = {
+        str(r.get("Abbreviation", ""))
+        for _, r in results.iterrows()
+        if r.get("Abbreviation", "")
+    }
+
+    valid_official_grid = {}
+    for driver, position in actual_grid.items():
+        if driver not in expected_drivers:
+            continue
+        try:
+            position = int(position)
+        except (TypeError, ValueError):
+            continue
+        if position > 0:
+            valid_official_grid[driver] = position
+
+    positions = list(valid_official_grid.values())
+    official_grid_is_valid = (
+        bool(expected_drivers)
+        and set(valid_official_grid) == expected_drivers
+        and len(positions) == len(set(positions))
+    )
+
+    if official_grid_is_valid:
+        actual_grid = valid_official_grid
+        print("  GP grid source: complete OpenF1 official grid.")
+    else:
+        actual_grid = {}
+        print(
+            "  GP grid source: provisional GP qualifying order "
+            "(official grid missing, incomplete, or invalid)."
+        )
 
     rows = []
     for _, driver in results.iterrows():
@@ -307,14 +352,18 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
 
         drv_abbr = driver.get("Abbreviation", "")
 
-        # Prefer race-session GridPosition (includes penalties) over qualifying order.
-        if drv_abbr in actual_grid:
+        # Official GP grid when valid; otherwise GP qualifying classification.
+        if official_grid_is_valid:
             grid = actual_grid[drv_abbr]
         else:
-            grid = driver.get("GridPosition")
-            if pd.isna(grid):
-                grid = driver.get("Position", 20)
-            grid = int(grid) if not pd.isna(grid) else 20
+            qualifying_position = driver.get("Position")
+            try:
+                grid = int(qualifying_position)
+                if grid < 1:
+                    raise ValueError("Invalid qualifying position")
+            except (TypeError, ValueError):
+                # Defensive fallback for missing qualifying classification.
+                grid = len(rows) + 1
 
         rows.append({
             "driver": drv_abbr,

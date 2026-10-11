@@ -362,28 +362,9 @@ def run(race: str, year: int, train_years=(2024, 2025), force_refresh=False):
     if quali_df.empty:
         raise RuntimeError(f"No qualifying data found for {year} {race}")
 
-    # Overlay the actual starting grid (includes post-qualifying penalties).
-    # Two sources, in priority order:
-    #   1. history_season — available once the race has finished; grid_position
-    #      there comes from the race session so penalties are already applied.
-    #   2. fetch_race_grid — live FastF1 call used when the race is in progress
-    #      or qualifying penalties have been published but the race hasn't started.
-    #      Falls back silently to qualifying order if the session isn't up yet.
-    race_rows = history_season[history_season["round"] == target_round]
-    if not race_rows.empty:
-        grid_map = race_rows.set_index("driver")["grid_position"].to_dict()
-    else:
-        grid_map = fetch_race_grid(year, race)
-
-    # Only overlay real, positive grid slots. A source that yields non-positive
-    # placeholders (e.g. FastF1's -1 for races missing grid data) must never
-    # overwrite the authoritative qualifying grid.
-    valid_grid = {d: int(g) for d, g in grid_map.items() if g is not None and g > 0}
-    if valid_grid:
-        quali_df = quali_df.copy()
-        quali_df["grid_position"] = (
-            quali_df["driver"].map(valid_grid).fillna(quali_df["grid_position"]).astype(int)
-        )
+    # The qualifying loader is the single source of truth for the target GP grid.
+    # It uses the official GP starting grid when complete and valid; otherwise,
+    # it falls back to the GP qualifying order. Never overwrite it with history.
 
     practice_pace    = load_practice_pace(year, race, force_refresh=force_refresh)
     history_for_form = history_season[history_season["round"] < target_round]
