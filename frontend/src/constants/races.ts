@@ -190,7 +190,7 @@ export const CIRCUIT_META: Record<string, CircuitMeta> = {
     overtaking: 'MEDIUM',
     round2026: 19,
     blurb: "High altitude (2,200m) significantly reduces aerodynamic downforce for all cars. Without DRS, the pace advantage earned in qualifying carries even more directly into the race here. The 2026 electrical power system is less affected by thin air than combustion.",
-    trackImgUrl: F1('mexico'),
+    trackImgUrl: F1('mexicocity'),
   },
   Brazil: {
     countryCode: 'br',
