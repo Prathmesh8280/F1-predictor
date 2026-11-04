@@ -199,7 +199,7 @@ export const CIRCUIT_META: Record<string, CircuitMeta> = {
     overtaking: 'HIGH',
     round2026: 20,
     blurb: "Famous for chaotic, unpredictable races. The undulating layout and long back straight create natural overtaking opportunities without needing DRS. Brazilian weather can change rapidly and completely flip the running order.",
-    trackImgUrl: F1('saopaulo'),
+    trackImgUrl: F1('interlagos'),
   },
   'Las Vegas': {
     countryCode: 'us',
