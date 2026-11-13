@@ -38,6 +38,11 @@ def build_circuit_features(history: pd.DataFrame, circuit_map: dict = None):
     if circuit_map is None:
         circuit_map = build_circuit_map(history)
 
+    history = history.copy()
+    history["grid_position"] = pd.to_numeric(
+        history["grid_position"], errors="coerce"
+    )
+    history = history[history["grid_position"].gt(0)]
     rows = []
     for _, row in history.iterrows():
         rows.append({
@@ -105,7 +110,8 @@ def build_stage2_training_data(
             driver = result["driver"]
             team   = result["team"]
             grid   = float(result["grid_position"])
-
+            if not np.isfinite(grid) or grid <= 0:
+                continue
             rows.append({
                 "championship_rank": float(driver_rank_map.get(driver, n_drivers)),
                 "constructor_rank":  float(team_rank_map.get(team, n_teams)),

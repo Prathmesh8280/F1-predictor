@@ -5,9 +5,8 @@ race is complete, and shapes the response the frontend expects. Results are
 cached in-process per (race, year); force_refresh bypasses and refreshes it.
 """
 import pandas as pd
-
 import ml.data_loader as dl
-from ml.predictor import run
+from ml.predictor import run, resolve_event
 
 from backend.app.constants import CIRCUIT_META, CIRCUIT_SVG
 
@@ -30,6 +29,15 @@ def generate_prediction(race: str, year: int, force_refresh: bool = False) -> di
 
     Raises RuntimeError if the race/data is unavailable (→ 404 at the route).
     """
+    event = resolve_event(year, race)
+
+    data_race = race
+
+    if event is not None:
+        location = dl.normalise_location(
+            str(event.get("Location", race))
+        )
+        data_race = dl.normalize_name(location).title()
     cache_key = (race, year)
 
     # Only serve from cache if the race was already completed when cached.
@@ -38,9 +46,13 @@ def generate_prediction(race: str, year: int, force_refresh: bool = False) -> di
     if not force_refresh and cache_key in _pred_cache and _pred_cache[cache_key]["is_completed"]:
         return _pred_cache[cache_key]
 
-    results, backtest = run(race=race, year=year, force_refresh=force_refresh)
+    results, backtest = run(
+        race=data_race,
+        year=year,
+        force_refresh=force_refresh
+    )
 
-    actual_df = dl.load_actual_results(year, race)
+    actual_df = dl.load_actual_results(year, data_race)
     is_completed = actual_df is not None and not actual_df.empty
 
     actual_map: dict = {}

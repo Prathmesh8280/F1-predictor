@@ -4,8 +4,11 @@ from datetime import datetime, timezone
 import fastf1
 import numpy as np
 import pandas as pd
-
+import unicodedata
 from ml.config import CACHE_DIR
+from ml.grid_refresh import refresh_cached_grid
+from ml.config import CACHE_DIR
+from ml.openf1_pace import load_openf1_pace_laps
 
 # Suppress FastF1's verbose INFO chatter — we print our own progress messages.
 # WARNING and above (accuracy checks, tyre corrections, etc.) stay visible.
@@ -115,6 +118,15 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
             for _, driver in results.iterrows():
                 position = driver.get("Position")
                 grid = driver.get("GridPosition")
+                grid = pd.to_numeric(grid, errors="coerce")
+
+                valid_grid = (
+                    pd.notna(grid)
+                    and grid > 0
+                    and float(grid).is_integer()
+                )
+
+                grid_position = int(grid) if valid_grid else float("nan")
 
                 if pd.isna(position):
                     position = len(results) + 1
@@ -134,7 +146,7 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
                     "location": location,
                     "driver": driver.get("Abbreviation", ""),
                     "team": driver.get("TeamName", ""),
-                    "grid_position": int(grid) if (not pd.isna(grid) and int(grid) > 0) else 20,
+                    "grid_position": grid_position,
                     "finish_position": position,
                     "finished": finished,
                 })
@@ -146,8 +158,15 @@ def load_history(train_years=(2024, 2025), force_refresh=False) -> pd.DataFrame:
     return df
 
 
+def normalize_name(name):
+    name = unicodedata.normalize("NFKD", str(name))
+    return "".join(
+        c for c in name if not unicodedata.combining(c)
+    ).casefold().strip()
+
 # Reverse of _LOCATION_CANONICAL: canonical race name → OpenF1 location string.
 _RACE_TO_OPENF1_LOCATION: dict[str, str] = {v: k for k, v in _LOCATION_CANONICAL.items()}
+
 
 
 def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[str, str]) -> dict[str, int]:
@@ -163,8 +182,8 @@ def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[st
 
         # Resolve OpenF1 location from canonical race name (e.g. "Italy" → "Monza").
         location_hint = _RACE_TO_OPENF1_LOCATION.get(race, race)
-        race_lower = race.lower()
-        location_lower = location_hint.lower()
+        race_lower = normalize_name(race)
+        location_lower = normalize_name(location_hint)
 
         meetings = requests.get(
             "https://api.openf1.org/v1/meetings",
@@ -179,9 +198,9 @@ def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[st
         for m in meetings:
             if not isinstance(m, dict):
                 continue
-            m_loc = m.get("location", "").lower()
-            m_country = m.get("country_name", "").lower()
-            m_name = m.get("meeting_name", "").lower()
+            m_loc = normalize_name(m.get("location", ""))
+            m_country = normalize_name(m.get("country_name", ""))
+            m_name = normalize_name(m.get("meeting_name", ""))
             if location_lower in m_loc or race_lower in m_country or race_lower in m_name:
                 meeting_key = m["meeting_key"]
                 break
@@ -195,20 +214,19 @@ def fetch_starting_grid_openf1(year: int, race: str, driver_num_to_abbr: dict[st
             timeout=10,
         ).json()
 
+        if not isinstance(sessions, list):
+            return {}
+
         qualifying_sessions = [
             s for s in sessions
-            if s.get("session_name") == "Qualifying"
+            if isinstance(s, dict)
+            and s.get("session_name") == "Qualifying"
         ]
 
         if not qualifying_sessions:
             return {}
 
         session_key = qualifying_sessions[0]["session_key"]
-
-        if not isinstance(sessions, list) or not sessions:
-            return {}
-
-        session_key = sessions[0]["session_key"]
 
         grid_data = requests.get(
             "https://api.openf1.org/v1/starting_grid",
@@ -275,8 +293,21 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
     _ensure_cache_dir()
     cache_path = _session_cache_path("quali", year, race)
 
-    if not force_refresh and os.path.exists(cache_path):
-        return pd.read_pickle(cache_path)
+    cached = (
+        pd.read_pickle(cache_path)
+        if os.path.exists(cache_path)
+        else None
+    )
+
+    if not force_refresh and cached is not None:
+        updated = refresh_cached_grid(
+            year, race, cached, fetch_starting_grid_openf1
+        )
+
+        if updated is not cached:
+            updated.to_pickle(cache_path)
+
+        return updated
 
     print(f"Fetching qualifying data: {year} {race}...")
 
@@ -299,8 +330,11 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
 
     # Try OpenF1 starting_grid first (penalty-corrected, available pre-race).
     # Fall back to race session GridPosition (post-race only).
-    actual_grid = fetch_starting_grid_openf1(
-        year, str(race), driver_num_to_abbr
+    actual_grid = (
+        fetch_starting_grid_openf1(
+            year, str(race), driver_num_to_abbr
+        )
+        if force_refresh else {}
     )
 
     expected_drivers = {
@@ -327,15 +361,43 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
         and len(positions) == len(set(positions))
     )
 
+    # Preserve previously cached OpenF1 grid if the API fails.
+    retained_cached_grid = False
+
+    if not official_grid_is_valid and cached is not None:
+        required = {"driver", "grid_position", "grid_source"}
+
+        if required.issubset(cached.columns):
+            old_grid = pd.to_numeric(
+                cached["grid_position"], errors="coerce"
+            )
+
+            if (
+                len(cached) == len(expected_drivers)
+                and cached["driver"].is_unique
+                and set(cached["driver"]) == expected_drivers
+                and cached["grid_source"].eq("openf1").all()
+                and old_grid.notna().all()
+                and old_grid.gt(0).all()
+                and old_grid.is_unique
+                and (old_grid % 1 == 0).all()
+            ):
+                valid_official_grid = dict(zip(
+                    cached["driver"], old_grid.astype(int)
+                ))
+                official_grid_is_valid = True
+                retained_cached_grid = True
+
     if official_grid_is_valid:
         actual_grid = valid_official_grid
-        print("  GP grid source: complete OpenF1 official grid.")
+
+        if retained_cached_grid:
+            print("  GP grid source: retained cached OpenF1 grid.")
+        else:
+            print("  GP grid source: complete OpenF1 official grid.")
     else:
         actual_grid = {}
-        print(
-            "  GP grid source: provisional GP qualifying order "
-            "(official grid missing, incomplete, or invalid)."
-        )
+        print("  GP grid source: provisional GP qualifying order.")
 
     rows = []
     for _, driver in results.iterrows():
@@ -352,7 +414,7 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
 
         drv_abbr = driver.get("Abbreviation", "")
 
-        # Official GP grid when valid; otherwise GP qualifying classification.
+
         if official_grid_is_valid:
             grid = actual_grid[drv_abbr]
         else:
@@ -367,12 +429,23 @@ def load_qualifying(year: int, race, force_refresh: bool = False) -> pd.DataFram
 
         rows.append({
             "driver": drv_abbr,
+            "driver_number": str(int(driver.get("DriverNumber", 0))),
             "team": driver.get("TeamName", ""),
             "qualifying_time_s": q_time,
             "grid_position": grid,
+            "grid_source": (
+                "openf1" if official_grid_is_valid
+                else "fastf1_qualifying"
+            ),
         })
 
     df = pd.DataFrame(rows)
+
+    if not force_refresh:
+        df = refresh_cached_grid(
+            year, race, df, fetch_starting_grid_openf1
+        )
+
     df.to_pickle(cache_path)
     return df
 
@@ -417,36 +490,64 @@ def load_practice_pace(year: int, race, force_refresh: bool = False) -> pd.DataF
     except Exception:
         is_sprint = False
 
-    try:
+    
+    def filter_laps(raw):
+        if raw is None or raw.empty:
+            return pd.DataFrame()
+
+        mask = (
+            raw["IsAccurate"].fillna(False).astype(bool)
+            & raw["Compound"].isin(["SOFT", "MEDIUM", "HARD"])
+        )
+
         if is_sprint:
-            print(f"  Sprint weekend — loading Sprint race laps for {year} {race}...")
-            session = fastf1.get_session(year, race, "S")
-            session.load(laps=True, telemetry=False, weather=False, messages=False)
-            laps = session.laps.copy()
-            # Skip lap 1 (standing start noise) and require accurate timing
-            laps = laps[
-                laps["IsAccurate"]
-                & (laps["LapNumber"] > 1)
-                & laps["Compound"].isin(["SOFT", "MEDIUM", "HARD"])
-            ].copy()
+            mask &= raw["LapNumber"] > 1
         else:
-            print(f"  Loading FP2 long runs for {year} {race}...")
-            session = fastf1.get_session(year, race, "FP2")
-            session.load(laps=True, telemetry=False, weather=False, messages=False)
-            laps = session.laps.copy()
-            # TyreLife >= 3 skips the warm-up laps at the start of each stint
-            laps = laps[
-                laps["IsAccurate"]
-                & (laps["TyreLife"] >= 3)
-                & laps["Compound"].isin(["SOFT", "MEDIUM", "HARD"])
-            ].copy()
+            mask &= raw["TyreLife"] >= 3
+
+        return raw.loc[mask].copy()
+
+    session = None
+    laps = pd.DataFrame()
+    pace_source = "fastf1"
+
+    try:
+        code = "S" if is_sprint else "FP2"
+        session = fastf1.get_session(year, race, code)
+
+        session.load(
+            laps=True,
+            telemetry=False,
+            weather=False,
+            messages=False,
+        )
+
+        laps = filter_laps(session.laps.copy())
+
     except Exception as e:
-        print(f"  Warning: Could not load practice/sprint data for {year} {race}: {e}")
-        return pd.DataFrame(columns=["driver", "practice_pace_s", "degradation_rate"])
+        print(f"  FastF1 pace unavailable: {e}")
+
+    # Try OpenF1 if FastF1 fails or has no usable laps.
+    if laps.empty:
+        try:
+            print(f"  Trying OpenF1 pace fallback: {year} {race}")
+
+            laps = filter_laps(
+                load_openf1_pace_laps(
+                    year, race, is_sprint=is_sprint
+                )
+            )
+
+            pace_source = "openf1"
+
+        except Exception as e:
+            print(f"  OpenF1 pace fallback failed: {e}")
 
     if laps.empty:
-        print(f"  Warning: No usable practice laps found for {year} {race}")
-        return pd.DataFrame(columns=["driver", "practice_pace_s", "degradation_rate"])
+        print("  Warning: No usable practice/sprint laps.")
+        return pd.DataFrame(
+            columns=["driver", "practice_pace_s", "degradation_rate"]
+        )
 
     laps["lap_time_s"] = laps["LapTime"].dt.total_seconds()
     laps = laps[laps["lap_time_s"].notna() & (laps["lap_time_s"] > 60)].copy()
@@ -496,18 +597,54 @@ def load_practice_pace(year: int, race, force_refresh: bool = False) -> pd.DataF
     # Linear fit to fuel-corrected compound-normalised times vs TyreLife.
     # Positive β = tyres degrade (expected). Lower β = better tyre life = gains
     # in the race second half.
-    fuel_compound_medians = laps.groupby("Compound")["fuel_corrected_s"].median().to_dict()
+    
+    stint_slopes = {}
+
+    for (driver, stint), slaps in laps.groupby(["Driver", "Stint"]):
+        slaps = slaps.dropna(
+            subset=["TyreLife", "lap_time_s", "fuel_corrected_s"]
+        )
+
+        if len(slaps) < 5:
+            continue
+
+        # Remove unusually slow or fast laps within each stint.
+        median_time = slaps["lap_time_s"].median()
+
+        clean = slaps[
+            slaps["lap_time_s"].between(
+                median_time - 3.0,
+                median_time + 3.0
+            )
+        ]
+
+        if len(clean) < 5 or clean["TyreLife"].nunique() < 3:
+            continue
+
+        x = clean["TyreLife"].to_numpy(dtype=float)
+        y = clean["fuel_corrected_s"].to_numpy(dtype=float)
+
+        if not (np.isfinite(x).all() and np.isfinite(y).all()):
+            continue
+
+        slope = float(np.polyfit(x, y, 1)[0])
+
+        if np.isfinite(slope):
+            stint_slopes.setdefault(driver, []).append(slope)
+
     deg_rows = []
-    for driver, dlaps in laps.groupby("Driver"):
-        deg_rate = float("nan")
-        if len(dlaps) >= 5:
-            compound = dlaps["Compound"].mode().iloc[0]
-            comp_med = fuel_compound_medians.get(compound, dlaps["fuel_corrected_s"].median())
-            y = dlaps["fuel_corrected_s"].values - comp_med
-            x = dlaps["TyreLife"].values
-            if len(set(x)) >= 3:
-                deg_rate = float(np.polyfit(x, y, 1)[0])
-        deg_rows.append({"driver": driver, "degradation_rate": deg_rate})
+
+    for driver in laps["Driver"].dropna().unique():
+        slopes = stint_slopes.get(driver, [])
+
+        deg_rows.append({
+            "driver": driver,
+            "degradation_rate": (
+                float(np.median(slopes))
+                if slopes else float("nan")
+            ),
+        })
+
 
     deg_df = pd.DataFrame(deg_rows)
     result = pace_median.merge(deg_df, on="driver", how="left")
@@ -516,10 +653,15 @@ def load_practice_pace(year: int, race, force_refresh: bool = False) -> pd.DataF
     # When FastF1 marks all of a driver's laps as inaccurate they get no pace
     # entry. Rather than filling with worst-pace (penalises them unfairly), use
     # the teammate's pace as a proxy — same car, same weekend conditions.
-    if hasattr(session, "results") and session.results is not None and not session.results.empty:
+    try:
+        team_results = session.results if session is not None else None
+    except Exception:
+        team_results = None
+
+    if team_results is not None and not team_results.empty:
         team_map = {
             r.get("Abbreviation", ""): r.get("TeamName", "")
-            for _, r in session.results.iterrows()
+            for _, r in team_results.iterrows()
             if r.get("Abbreviation", "")
         }
         # Group drivers by team
@@ -546,6 +688,7 @@ def load_practice_pace(year: int, race, force_refresh: bool = False) -> pd.DataF
             result = pd.concat([result, pd.DataFrame(fill_rows)], ignore_index=True)
 
     print(f"  Race pace loaded for {len(result)} drivers.")
+    result.attrs["practice_source"] = pace_source
     result.to_pickle(cache_path)
     return result
 

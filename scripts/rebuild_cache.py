@@ -22,7 +22,11 @@ import fastf1
 import pandas as pd
 from datetime import datetime, timezone
 
-from ml.data_loader import load_history, load_qualifying, load_practice_pace, CACHE_DIR
+from ml.data_loader import (
+    load_history, load_qualifying, load_practice_pace,
+    CACHE_DIR, _session_cache_path,
+    normalise_location, normalize_name,
+)
 
 
 def _completed_rounds(year: int) -> list[int]:
@@ -49,6 +53,116 @@ def warm_stage1(force: bool = False):
     print(f"   Done ({time.time() - t:.1f}s)")
 
 
+def _sync_postrace_grid(year: int, rnd: int):
+    """Update qualifying caches using FastF1 race starting positions."""
+
+    try:
+        race_session = fastf1.get_session(year, rnd, "R")
+        race_session.load(
+            laps=False, telemetry=False,
+            weather=False, messages=False
+        )
+
+        results = race_session.results
+
+        if results is None or results.empty:
+            print("    Race results unavailable; skipping grid update.")
+            return False
+
+        if pd.to_numeric(
+            results["Position"], errors="coerce"
+        ).notna().sum() == 0:
+            print("    Race not completed; skipping.")
+            return False
+
+        positions = pd.to_numeric(
+            results["GridPosition"], errors="coerce"
+        )
+        drivers = results["Abbreviation"].astype(str)
+
+        # Never store an incomplete or fabricated starting grid.
+        if not (
+            drivers.ne("").all()
+            and drivers.is_unique
+            and positions.notna().all()
+            and positions.gt(0).all()
+            and (positions % 1 == 0).all()
+            and positions.is_unique
+        ):
+            print("    Race grid incomplete; keeping existing caches.")
+            return False
+
+        grid_map = dict(zip(drivers, positions.astype(int)))
+
+        event = fastf1.get_event(year, rnd)
+
+        # Cover numeric round and normalised race-name caches.
+        aliases = {
+            str(rnd),
+            normalize_name(
+                normalise_location(event.get("Location", ""))
+            ),
+        }
+
+        round_path = _session_cache_path("quali", year, rnd)
+
+        name_path = _session_cache_path(
+            "quali",
+            year,
+            normalize_name(
+                normalise_location(event.get("Location", ""))
+            ),
+        )
+
+        # Use whichever qualifying cache already exists.
+        base_path = next(
+            (p for p in [round_path, name_path] if os.path.exists(p)),
+            None,
+        )
+
+        if base_path is None:
+            print("    No existing qualifying cache found; skipping.")
+            return False
+
+        base_df = pd.read_pickle(base_path)
+        updated_count = 0
+
+        for alias in aliases:
+            if not alias:
+                continue
+
+            path = _session_cache_path("quali", year, alias)
+            df = (
+                pd.read_pickle(path)
+                if os.path.exists(path)
+                else base_df.copy()
+            )
+
+            if (
+                df["driver"].duplicated().any()
+                or set(df["driver"]) != set(grid_map)
+            ):
+                print(f"    Driver mismatch: {alias}; skipping.")
+                continue
+
+            df = df.copy()
+            df["grid_position"] = (
+                df["driver"].map(grid_map).astype(int)
+            )
+            df["grid_source"] = "fastf1_race"
+            df.attrs["post_race_verified"] = True
+
+            df.to_pickle(path)
+            updated_count += 1
+
+        print(f"    Post-race grid synced to {updated_count} cache(s).")
+        return updated_count > 0
+
+    except Exception as exc:
+        print(f"    Post-race grid sync failed: {exc}")
+        return False
+
+
 def warm_stage2(year: int = 2026, force: bool = False):
     """Cache current-season history + per-round qualifying and FP2 data."""
     print(f"\n── Stage 2: {year} season data ────────────────────────────────")
@@ -71,7 +185,8 @@ def warm_stage2(year: int = 2026, force: bool = False):
         t = time.time()
         try:
             load_qualifying(year, rnd, force_refresh=force)
-            print(f"    Qualifying  ({time.time() - t:.1f}s)")
+            _sync_postrace_grid(year, rnd)
+            print(f"    Qualifying + race grid ({time.time() - t:.1f}s)")
         except Exception as e:
             print(f"    Qualifying  FAILED: {e}")
 
